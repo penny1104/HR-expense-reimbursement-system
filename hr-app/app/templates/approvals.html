@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="fw-bold">主管簽核</h2>
+        <p class="text-muted">審核員工的差旅申請或報銷單</p>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">單號</th>
+                        <th>申請人</th>
+                        <th>類型</th>
+                        <th>詳細資訊</th>
+                        <th>狀態</th>
+                        <th class="text-end pe-4">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pending_items %}
+                    <tr onclick="location.href='{{ url_for('main.review_travel', req_id=item.id) if item.status == 'Pending' else url_for('main.review_expense', req_id=item.id) }}'" 
+                        style="cursor: pointer;">
+                        <td class="ps-4 fw-bold text-primary">#{{ item.id }}</td>
+                        <td>{{ item.employee.name }}</td>
+                        <td>
+                            {% if item.status == 'Pending' %}
+                                <span class="badge bg-primary px-3 py-2" style="border-radius: 6px;">差旅預算申請</span>
+                            {% else %}
+                                <span class="badge bg-info text-dark px-3 py-2" style="border-radius: 6px;">報銷單審核</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-medium text-dark">{{ item.destination }}</div>
+                            <div class="small text-muted">{{ item.start_date }} ~ {{ item.end_date }}</div>
+                        </td>
+                        <td>
+                            {% if item.status == 'Pending' %}
+                                <span class="badge rounded-pill bg-warning text-dark px-3">待主管核准預算</span>
+                            {% elif item.status == 'ExpensePendingManager' %}
+                                <span class="badge rounded-pill bg-danger px-3">高風險報銷待審</span>
+                            {% elif item.status == 'ExpensePendingAccounting' %}
+                                <span class="badge rounded-pill bg-primary px-3">報銷單待撥款</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end pe-4">
+                            {% if item.status == 'Pending' %}
+                                <button class="btn btn-sm btn-outline-primary shadow-sm px-3" style="border-radius: 8px;">
+                                    <i class="bi bi-eye"></i> 審閱
+                                </button>
+                            {% else %}
+                                <button class="btn btn-sm btn-outline-info shadow-sm px-3" style="border-radius: 8px; color: #0891b2; border-color: #0891b2;">
+                                    <i class="bi bi-file-earmark-check"></i> 審查
+                                </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>
+                            目前沒有待處理的簽核案件
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

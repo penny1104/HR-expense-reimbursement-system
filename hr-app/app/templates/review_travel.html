@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block content_header %}
+<h4 class="mb-0 fw-bold">審閱差旅申請</h4>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm overflow-hidden" style="border-radius: 16px;">
+                <div class="card-header bg-white py-4 border-bottom-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="h2 fw-bold mb-0" style="color: var(--brand-primary);">申請單</div>
+                            <div class="small fw-bold text-muted mt-1" style="font-size: 0.9rem;">單號：#{{ req.id }}</div>
+                        </div>
+                        <span class="badge rounded-pill bg-warning text-dark px-3 py-2">待主管核准</span>
+                    </div>
+                </div>
+                <div class="card-body p-4 pt-0">
+                    <div class="row g-4">
+                        <!-- ... unchanged info sections ... -->
+                        <div class="col-md-6">
+                            <label class="text-muted small text-uppercase fw-bold mb-1">申請人</label>
+                            <div class="fw-medium fs-5 text-dark">{{ req.employee.name }} ({{ req.employee.department }})</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small text-uppercase fw-bold mb-1">出差地點</label>
+                            <div class="fw-medium fs-5 text-dark">{{ req.destination }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small text-uppercase fw-bold mb-1">出差日期</label>
+                            <div class="fw-medium fs-6 text-dark">{{ req.start_date }} 至 {{ req.end_date }}</div>
+                        </div>
+                        <div class="col-md-12">
+                            <hr class="my-2 opacity-10">
+                            <label class="text-muted small text-uppercase fw-bold mb-2">預估經費</label>
+                            <div class="row text-center g-3">
+                                <div class="col-3">
+                                    <div class="p-3 bg-light rounded-3">
+                                        <div class="small text-muted mb-1">住宿</div>
+                                        <div class="fw-bold text-primary">${{ "{:,.0f}".format(req.est_accommodation) }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="p-3 bg-light rounded-3">
+                                        <div class="small text-muted mb-1">交通</div>
+                                        <div class="fw-bold text-primary">${{ "{:,.0f}".format(req.est_transportation) }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="p-3 bg-light rounded-3">
+                                        <div class="small text-muted mb-1">伙食</div>
+                                        <div class="fw-bold text-primary">${{ "{:,.0f}".format(req.est_meals) }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-3">
+                                    <div class="p-3 bg-light rounded-3">
+                                        <div class="small text-muted mb-1">雜費</div>
+                                        <div class="fw-bold text-primary">${{ "{:,.0f}".format(req.est_misc) }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="text-muted small text-uppercase fw-bold mb-1">出差事由</label>
+                            <div class="p-3 bg-light rounded-3 text-secondary" style="min-height: 100px;">
+                                {{ req.purpose }}
+                            </div>
+                        </div>
+
+                        <!-- NEW: Comment Section - Only for Reviewers -->
+                        {% if current_user.role in ['Manager', 'Accountant'] %}
+                        <div class="col-md-12 mt-4">
+                            <label class="form-label fw-bold" style="color: var(--brand-primary);"><i class="bi bi-chat-left-text me-2"></i>審核意見 / 退回原因</label>
+                            <textarea id="reviewComment" name="review_comment" class="form-control" rows="3" 
+                                      placeholder="若要退回案件，請務必填寫原因..." 
+                                      style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px;">{{ req.review_comment if req.review_comment else '' }}</textarea>
+                        </div>
+                        {% elif req.review_comment %}
+                        <div class="col-md-12 mt-4">
+                            <label class="form-label fw-bold text-muted small"><i class="bi bi-chat-left-text me-2"></i>最新審核預覽 / 退回原因</label>
+                            <div class="p-3 bg-light rounded-3 text-danger border-start border-danger border-4">
+                                {{ req.review_comment }}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if current_user.role == 'Manager' and req.status == 'Pending' %}
+                <div class="card-footer bg-white p-4 border-top-0">
+                    <form id="reviewForm" action="{{ url_for('main.process_review', req_id=req.id) }}" method="POST">
+                        <input type="hidden" name="review_comment" id="hiddenComment">
+                        <input type="hidden" name="action" id="actionField">
+                        
+                        <div class="d-flex gap-3">
+                            <button type="button" onclick="submitReview('approve')" class="btn btn-primary flex-grow-1 py-3 shadow-sm px-4" style="border-radius: 12px;">
+                                <i class="bi bi-check-circle-fill me-2"></i> 核准申請
+                            </button>
+                            <button type="button" onclick="submitReview('reject')" class="btn btn-outline-danger flex-grow-1 py-3 px-4" style="border-radius: 12px;">
+                                <i class="bi bi-x-circle me-2"></i> 駁回申請
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+
+            <script>
+                function submitReview(action) {
+                    const comment = document.getElementById('reviewComment').value.trim();
+                    const hiddenComment = document.getElementById('hiddenComment');
+                    const actionField = document.getElementById('actionField');
+                    const form = document.getElementById('reviewForm');
+
+                    if (action === 'reject' && !comment) {
+                        alert('退回案件時，必須填寫「審核意見 / 退回原因」。');
+                        document.getElementById('reviewComment').focus();
+                        return;
+                    }
+
+                    hiddenComment.value = comment;
+                    actionField.value = action;
+                    form.submit();
+                }
+            </script>
+
+            <div class="text-center mt-4">
+                {% if current_user.role in ['Manager', 'Accountant'] %}
+                <a href="{{ url_for('main.approvals') }}" class="text-decoration-none text-muted">
+                    <i class="bi bi-arrow-left me-1"></i> 返回簽核中心
+                </a>
+                {% else %}
+                <a href="{{ url_for('main.progress') }}" class="text-decoration-none text-muted">
+                    <i class="bi bi-arrow-left me-1"></i> 返回進度追蹤
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

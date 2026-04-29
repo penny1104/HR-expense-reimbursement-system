@@ -1,0 +1,358 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% set taiwan_regions = ["基隆市", "台北市", "新北市", "桃園市", "新竹市", "新竹縣", "苗栗縣", "台中市", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "台南市", "高雄市", "屏東縣", "宜蘭縣", "花蓮縣", "台東縣", "澎湖縣", "金門縣", "連江縣", "其他(海外)"] %}
+<div class="row mb-4 align-items-center">
+    <div class="col-12">
+        <a href="{{ url_for('main.dashboard') }}" class="text-decoration-none text-muted mb-3 d-inline-flex align-items-center hover-opacity">
+            <i class="bi bi-chevron-left me-1"></i> 返回儀表板
+        </a>
+        <h2 class="fw-bold" style="color: var(--brand-primary); letter-spacing: -0.5px;">
+            {% if draft_req %}
+                {% if draft_req.status == 'Rejected' %}
+                    重新編輯申請單 (退回件)
+                {% else %}
+                    編輯差旅申請 (草稿)
+                {% endif %}
+            {% else %}
+                提交新的差旅申請
+            {% endif %}
+        </h2>
+        <p class="text-muted fs-5 opacity-75">出差前申請與預估費用設定</p>
+
+        {% if draft_req and draft_req.review_comment and draft_req.status in ['Rejected', 'Draft'] %}
+        <div class="alert alert-danger border-0 shadow-sm d-flex align-items-start gap-3 mt-3" style="border-radius: 12px; background-color: #FEF2F2;">
+            <i class="bi bi-exclamation-circle-fill fs-4 mt-1" style="color: #EF4444;"></i>
+            <div>
+                <div class="fw-bold mb-1" style="color: #991B1B;">此申請單曾被退回，退回原因：</div>
+                <div class="text-danger">{{ draft_req.review_comment }}</div>
+                <div class="small text-muted mt-2">請根據上述意見修改後，再次點擊「送出審核申請」。</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 bg-white" style="border-radius: 16px;">
+    <div class="card-body p-4 p-md-5">
+        <form method="POST" action="{{ url_for('main.apply', draft_id=draft_id) if draft_id else url_for('main.apply') }}" novalidate>
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">申請人姓名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" name="applicant_name" 
+                           value="{{ current_user.name }}" readonly 
+                           style="background-color: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; cursor: not-allowed;">
+                    <small class="text-muted">姓名由系統帶入，不可修改</small>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label fw-bold mb-0">目的地 <span class="text-danger">*</span></label>
+                        <button type="button" id="addLocation" class="btn btn-sm btn-outline-primary px-3 py-1" style="border-radius: 8px; font-size: 0.8rem;">
+                            <i class="bi bi-geo-alt-fill me-1"></i>+ 增加多個地點
+                        </button>
+                    </div>
+                    <div id="locationContainer">
+                        <div class="d-flex gap-2 mb-2">
+                            <select class="form-select" name="destination" required style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; height: auto;">
+                                <option value="" disabled {{ 'selected' if not draft_req else '' }}>請選擇地點...</option>
+                                {% set main_loc = draft_req.destination.split(', ')[0] if draft_req and draft_req.destination else '' %}
+                                {% for region in taiwan_regions %}
+                                    <option value="{{ region }}" {{ 'selected' if main_loc == region else '' }}>{{ region }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {# Render existing extra locations if any #}
+                        {% if draft_req and draft_req.destination and draft_req.destination.split(', ')|length > 1 %}
+                            {% for loc in draft_req.destination.split(', ')[1:] %}
+                            <div class="d-flex gap-2 mb-2 align-items-center">
+                                <select class="form-select" name="destination" required style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; height: auto;">
+                                    {% for region in taiwan_regions %}
+                                        <option value="{{ region }}" {{ 'selected' if loc == region else '' }}>{{ region }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-danger border-0 p-2" onclick="this.parentElement.remove()">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="col-md-5">
+                    <label class="form-label fw-bold">出差啟始日 <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" name="start_date" 
+                           value="{{ draft_req.start_date.strftime('%Y-%m-%d') if draft_req and draft_req.start_date else '' }}" 
+                           required style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+                </div>
+                <div class="col-md-2 text-center d-flex align-items-end justify-content-center pb-2">
+                    <span class="text-muted fw-bold pb-2">至</span>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-bold">出差結束日 <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" name="end_date" 
+                           value="{{ draft_req.end_date.strftime('%Y-%m-%d') if draft_req and draft_req.end_date else '' }}" 
+                           required style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+                </div>
+                
+                <div class="col-md-12 mt-4">
+                    <label class="form-label fw-bold">出差詳細事由 <span class="text-danger">*</span></label>
+                    <textarea class="form-control" name="purpose" rows="4" 
+                              required style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">{{ draft_req.purpose if draft_req else '' }}</textarea>
+                </div>
+                
+                <div class="col-12 mt-5">
+                    <h5 class="fw-bold mb-4" style="color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary-light); padding-bottom: 12px;">
+                        預計費用設定 <span class="small fw-normal text-muted">(必填，暫無請填 0)</span>
+                    </h5>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small">住宿費 <span class="badge bg-light text-muted border fw-normal limit-hint-acc"></span></label>
+                    <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                        <span class="input-group-text border-0 text-muted" style="background-color: #F1F5F9;">$</span>
+                        <input type="number" class="form-control border-0 cost-input" name="est_accommodation" 
+                               value="{{ draft_req.est_accommodation|int if draft_req else 0 }}" 
+                               required min="0" style="background-color: #F1F5F9; padding: 12px;">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small">交通費 <span class="badge bg-light text-muted border fw-normal">小黃單趟上限 800</span></label>
+                    <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                        <span class="input-group-text border-0 text-muted" style="background-color: #F1F5F9;">$</span>
+                        <input type="number" class="form-control border-0 cost-input" name="est_transportation" 
+                               value="{{ draft_req.est_transportation|int if draft_req else 0 }}" 
+                               required min="0" style="background-color: #F1F5F9; padding: 12px;">
+                    </div>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">高鐵以標準車廂為準</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small">伙食費 <span class="badge bg-light text-muted border fw-normal limit-hint-meals"></span></label>
+                    <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                        <span class="input-group-text border-0 text-muted" style="background-color: #F1F5F9;">$</span>
+                        <input type="number" class="form-control border-0 cost-input" name="est_meals" 
+                               value="{{ draft_req.est_meals|int if draft_req else 0 }}" 
+                               required min="0" style="background-color: #F1F5F9; padding: 12px;">
+                    </div>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">早75/午150/晚150</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small">雜費</label>
+                    <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                        <span class="input-group-text border-0 text-muted" style="background-color: #F1F5F9;">$</span>
+                        <input type="number" class="form-control border-0 cost-input" name="est_misc" 
+                               value="{{ draft_req.est_misc|int if draft_req else 0 }}" 
+                               required min="0" style="background-color: #F1F5F9; padding: 12px;">
+                    </div>
+                </div>
+                
+                <div class="col-md-12 text-end mt-4">
+                    <h4 class="fw-bold">預估總金額 <span id="totalDisplay" style="color: var(--brand-secondary); margin-left: 20px;">$ 0</span></h4>
+                </div>
+
+                <div class="col-12 mt-5">
+                    <h5 class="fw-bold mb-3" style="color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary-light); padding-bottom: 12px;">
+                        佐證資料 <span class="small fw-normal text-muted">(選填)</span>
+                    </h5>
+                    <label class="form-label text-muted small mb-3 d-block">請上傳會議邀請函、飯店預約單或交通訂單截圖</label>
+                    <input type="file" class="form-control" name="support_docs" 
+                           style="background-color: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 12px;">
+                </div>
+                
+                <div class="col-12 mt-5 text-center d-flex gap-3 justify-content-center">
+                    <button type="button" class="btn btn-outline-secondary px-5 py-2 fw-bold shadow-sm" style="border-radius: 12px;" onclick="handleFormSubmission('draft')">
+                        <i class="bi bi-save me-2"></i>暫存草稿
+                    </button>
+                    <button type="button" class="btn px-5 py-2 fw-bold text-white shadow" style="background-color: var(--brand-primary); border-radius: 12px;" onclick="handleFormSubmission('submit')">
+                        <i class="bi bi-send-fill me-2"></i>送出審核申請
+                    </button>
+                    <input type="hidden" name="action" id="formAction">
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 驗證警告 Modal -->
+<div class="modal fade" id="validationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow" style="border-radius: 16px;">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>申請單檢查
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p id="validationMsg" class="fs-5 mb-0" style="color: #475569;"></p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-danger px-4 py-2 fw-bold" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    返回修改
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 1. 基本設定與元素取得
+    const costInputs = document.querySelectorAll('.cost-input');
+    const totalDisplay = document.getElementById('totalDisplay');
+    const startDateInput = document.querySelector('input[name="start_date"]');
+    const endDateInput = document.querySelector('input[name="end_date"]');
+    const hintAcc = document.querySelector('.limit-hint-acc');
+    const hintMeals = document.querySelector('.limit-hint-meals');
+
+    const LIMIT_CONFIG = {
+        acc_weekday: 3500,
+        acc_weekend: 4500,
+        meal_per_day: 375
+    };
+
+    function getTripStats() {
+        const start = new Date(startDateInput.value);
+        const end = new Date(endDateInput.value);
+        if (isNaN(start) || isNaN(end) || start > end) return null;
+
+        let weekdays = 0;
+        let weekends = 0;
+        let days = 0;
+        
+        let curr = new Date(start);
+        while (curr <= end) {
+            days++;
+            if (curr < end) {
+                const day = curr.getDay();
+                if (day === 5 || day === 6) weekends++;
+                else weekdays++;
+            }
+            curr.setDate(curr.getDate() + 1);
+        }
+        return { days, weekdays, weekends };
+    }
+
+    function validateAndCalculate() {
+        const stats = getTripStats();
+        let total = 0;
+        costInputs.forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        totalDisplay.innerText = '$ ' + total.toLocaleString();
+
+        if (stats) {
+            const accLimit = (stats.weekdays * LIMIT_CONFIG.acc_weekday) + (stats.weekends * LIMIT_CONFIG.acc_weekend);
+            const mealLimit = stats.days * LIMIT_CONFIG.meal_per_day;
+
+            if (hintAcc) hintAcc.innerText = `上限: ${accLimit.toLocaleString()}`;
+            if (hintMeals) hintMeals.innerText = `上限: ${mealLimit.toLocaleString()}`;
+
+            const accInput = document.querySelector('input[name="est_accommodation"]');
+            if (parseFloat(accInput.value) > accLimit) {
+                accInput.parentElement.style.border = '1px solid #dc3545';
+                accInput.parentElement.style.boxShadow = '0 0 0 3px rgba(220, 53, 69, 0.5)';
+            } else {
+                accInput.parentElement.style.border = 'none';
+                accInput.parentElement.style.boxShadow = '';
+            }
+
+            const mealInput = document.querySelector('input[name="est_meals"]');
+            if (parseFloat(mealInput.value) > mealLimit) {
+                mealInput.parentElement.style.border = '1px solid #dc3545';
+                mealInput.parentElement.style.boxShadow = '0 0 0 3px rgba(220, 53, 69, 0.5)';
+            } else {
+                mealInput.parentElement.style.border = 'none';
+                mealInput.parentElement.style.boxShadow = '';
+            }
+        } else {
+            if (hintAcc) hintAcc.innerText = '';
+            if (hintMeals) hintMeals.innerText = '';
+        }
+    }
+
+    costInputs.forEach(input => {
+        input.addEventListener('input', validateAndCalculate);
+    });
+    startDateInput.addEventListener('change', validateAndCalculate);
+    endDateInput.addEventListener('change', validateAndCalculate);
+
+    // 2. 增加地點按鈕功能
+    const TAIWAN_REGIONS = ["基隆市", "台北市", "新北市", "桃園市", "新竹市", "新竹縣", "苗栗縣", "台中市", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "台南市", "高雄市", "屏東縣", "宜蘭縣", "花蓮縣", "台東縣", "澎湖縣", "金門縣", "連江縣", "其他(海外)"];
+    document.getElementById('addLocation').addEventListener('click', function() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'd-flex gap-2 mb-2 align-items-center';
+        const select = document.createElement('select');
+        select.name = 'destination';
+        select.className = 'form-select';
+        select.required = true;
+        select.style = 'background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; height: auto;';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = ''; defaultOpt.disabled = true; defaultOpt.selected = true; defaultOpt.text = '請選擇地點...';
+        select.appendChild(defaultOpt);
+        TAIWAN_REGIONS.forEach(region => {
+            const opt = document.createElement('option');
+            opt.value = opt.text = region;
+            select.appendChild(opt);
+        });
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button'; deleteBtn.className = 'btn btn-outline-danger border-0 p-2';
+        deleteBtn.innerHTML = '<i class="bi bi-trash3"></i>';
+        deleteBtn.onclick = function() { wrapper.remove(); };
+        wrapper.appendChild(select);
+        wrapper.appendChild(deleteBtn);
+        document.getElementById('locationContainer').appendChild(wrapper);
+    });
+
+    // 3. 手動處理表單送出邏輯
+    window.handleFormSubmission = function(action) {
+        const form = document.querySelector('form');
+        const vModalEl = document.getElementById('validationModal');
+        const validationModal = new bootstrap.Modal(vModalEl);
+        const validationMsg = document.getElementById('validationMsg');
+        const formAction = document.getElementById('formAction');
+
+        formAction.value = action;
+        if (action === 'submit') {
+            if (!form.checkValidity()) {
+                const firstInvalid = form.querySelector(':invalid');
+                if (firstInvalid) {
+                    let label = "必填欄位";
+                    if (firstInvalid.name === 'destination') label = "目的地";
+                    if (firstInvalid.name === 'start_date') label = "起始日";
+                    if (firstInvalid.name === 'end_date') label = "結束日";
+                    if (firstInvalid.name === 'purpose') label = "出差事由";
+                    validationMsg.innerText = `【提醒】「${label}」尚未填寫完整，請填寫後再送出。`;
+                    validationModal.show();
+                    return false;
+                }
+            }
+            const stats = getTripStats();
+            if (stats) {
+                const accLimit = (stats.weekdays * LIMIT_CONFIG.acc_weekday) + (stats.weekends * LIMIT_CONFIG.acc_weekend);
+                const mealLimit = stats.days * LIMIT_CONFIG.meal_per_day;
+                const accVal = parseFloat(document.querySelector('input[name="est_accommodation"]').value) || 0;
+                const mealVal = parseFloat(document.querySelector('input[name="est_meals"]').value) || 0;
+                if (accVal > accLimit) {
+                    validationMsg.innerText = `【無法送出】住宿費金額 ($${accVal.toLocaleString()}) 超過上限 ($${accLimit.toLocaleString()})，請修改後再送出申請。`;
+                    validationModal.show();
+                    return false;
+                }
+                if (mealVal > mealLimit) {
+                    validationMsg.innerText = `【無法送出】伙食費金額 ($${mealVal.toLocaleString()}) 超過上限 ($${mealLimit.toLocaleString()})，請修改後再送出申請。`;
+                    validationModal.show();
+                    return false;
+                }
+            }
+        }
+        form.submit();
+    };
+
+    // 初始化
+    validateAndCalculate();
+</script>
+{% endblock %}
+
