@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+
+{% block content_header %}
+<h4 class="mb-0 fw-bold">審核報銷單</h4>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row g-4">
+        <!-- Sidebar: Summary & Risk -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                <div class="card-body p-4 text-center">
+                    <img src="https://ui-avatars.com/api/?name={{ req.employee.name }}&size=80&background=F1F5F9&color=22277F&rounded=true" alt="Avatar" class="mb-3">
+                    <h5 class="fw-bold mb-1">{{ req.employee.name }}</h5>
+                    <p class="text-muted small mb-4">{{ req.employee.department }} | {{ req.destination }}</p>
+                    
+                    <div class="p-3 rounded-4 mb-4 {% if req.risk_level == 'High' %}bg-danger-subtle text-danger{% else %}bg-success-subtle text-success{% endif %}">
+                        <div class="small fw-bold text-uppercase mb-1">系統風險評估</div>
+                        <h3 class="fw-bold mb-0">{{ req.risk_level }}</h3>
+                        <div class="small">風險分數: {{ "{:.0f}".format(req.risk_score) }}</div>
+                    </div>
+
+                    <div class="text-start">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">預計預算</span>
+                            <span class="fw-bold">${{ "{:,.0f}".format(req.est_accommodation + req.est_transportation + req.est_meals + req.est_misc) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">實際申請</span>
+                            {% set total_actual = req.expenses | sum(attribute='requested_amount') %}
+                            <span class="fw-bold text-primary">${{ "{:,.0f}".format(total_actual) }}</span>
+                        </div>
+                        <hr class="my-3 opacity-10">
+                        <div class="small text-muted mb-3">簽核狀態: 
+                            <span class="badge rounded-pill {% if req.status == 'ExpensePendingManager' %}bg-danger{% else %}bg-primary{% endif %} px-2">
+                                {{ '主管審核中' if req.status == 'ExpensePendingManager' else '會計審核中' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Card: Only for Reviewers -->
+            {% if current_user.role in ['Manager', 'Accountant'] and req.employee_id != current_user.id %}
+            <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-3">審核決策</h6>
+                    <form id="reviewForm" action="{{ url_for('main.process_review', req_id=req.id) }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label small text-muted">審核意見 / 退回原因</label>
+                            <textarea id="reviewCommentInput" class="form-control border-0 bg-light" rows="3" placeholder="若要退回案件，請務必填寫原因..." style="border-radius: 12px;"></textarea>
+                        </div>
+                        <input type="hidden" name="review_comment" id="hiddenComment">
+                        <input type="hidden" name="action" id="actionField">
+                        
+                        <div class="d-grid gap-2">
+                            <button type="button" onclick="submitReview('approve')" class="btn btn-primary py-3 shadow-sm" style="border-radius: 12px;">
+                                <i class="bi bi-check-circle-fill me-2"></i> 核准通過
+                            </button>
+                            <button type="button" onclick="submitReview('reject')" class="btn btn-outline-danger py-2" style="border-radius: 12px;">
+                                駁回此單
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% elif req.review_comment %}
+            <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold mb-2">最新審核意見</h6>
+                    <div class="p-3 bg-danger-subtle text-danger rounded-3 border-start border-danger border-4">
+                        {{ req.review_comment }}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <script>
+                function submitReview(action) {
+                    const comment = document.getElementById('reviewCommentInput').value.trim();
+                    const hiddenComment = document.getElementById('hiddenComment');
+                    const actionField = document.getElementById('actionField');
+                    const form = document.getElementById('reviewForm');
+
+                    if (action === 'reject' && !comment) {
+                        alert('退回案件時，必須填寫「審核意見 / 退回原因」。');
+                        document.getElementById('reviewCommentInput').focus();
+                        return;
+                    }
+
+                    hiddenComment.value = comment;
+                    actionField.value = action;
+                    form.submit();
+                }
+            </script>
+        </div>
+
+        <!-- Main Content: Expense Details -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100" style="border-radius: 16px;">
+                <div class="card-header bg-white p-4 border-bottom-0">
+                    <h5 class="mb-0 fw-bold">消費細目明細</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="ps-4 text-muted small fw-bold text-uppercase py-3">日期</th>
+                                    <th class="text-muted small fw-bold text-uppercase py-3">類別</th>
+                                    <th class="text-muted small fw-bold text-uppercase py-3">項目說明</th>
+                                    <th class="text-end pe-4 text-muted small fw-bold text-uppercase py-3">金額</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for exp in req.expenses %}
+                                <tr>
+                                    <td class="ps-4">{{ exp.expense_date }}</td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">{{ exp.expense_category }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-medium">{{ exp.expense_name }}</div>
+                                        <div class="small text-muted"><i class="bi bi-paperclip"></i> 電子收據已上傳</div>
+                                        {% if exp.expense_note %}
+                                        <div class="mt-1 small py-1 px-2 bg-warning-subtle text-warning-emphasis rounded" style="border-left: 3px solid #f59e0b; font-size: 0.75rem;">
+                                            <i class="bi bi-info-circle-fill me-1"></i><strong>超額說明：</strong> {{ exp.expense_note }}
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-4 fw-bold text-primary">${{ "{:,.0f}".format(exp.requested_amount) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-group-divider">
+                                <tr class="bg-light-subtle">
+                                    <td colspan="3" class="ps-4 fw-bold">總計金額</td>
+                                    <td class="text-end pe-4 fw-bold text-danger fs-5">${{ "{:,.0f}".format(total_actual) }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white p-4 border-top-0">
+                    <div class="p-3 rounded-4 bg-light border border-dashed text-center">
+                        <i class="bi bi-images fs-2 text-muted d-block mb-2"></i>
+                        <span class="text-muted small">所有收據憑證已於系統驗證符合規範</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="text-center mt-4">
+        {% if current_user.role in ['Manager', 'Accountant'] and req.employee_id != current_user.id %}
+        <a href="{{ url_for('main.approvals') }}" class="text-decoration-none text-muted">
+            <i class="bi bi-arrow-left me-1"></i> 返回簽核中心
+        </a>
+        {% else %}
+        <a href="{{ url_for('main.progress') }}" class="text-decoration-none text-muted">
+            <i class="bi bi-arrow-left me-1"></i> 返回進度追蹤
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

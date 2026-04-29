@@ -1,0 +1,325 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-12 text-center pb-3 border-bottom">
+        <h2 class="fw-bold" style="color: var(--brand-primary);">填寫報銷單 - {{ req.destination }}</h2>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12 text-center text-muted">
+        <span class="me-4 fw-medium">原差旅申請單號: TQ{{ "%06d" % req.id }}</span>
+        <span class="me-4 fw-medium">出差日期: {{ req.start_date }}</span>
+        <span class="fw-medium text-dark">預算總額: <span style="color: var(--brand-secondary);">NT$ {{ "{:,.0f}".format(req.est_accommodation + req.est_transportation + req.est_meals + req.est_misc) }}</span></span>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 bg-white" style="border-radius: 20px;">
+    <div class="card-body p-4 p-md-5">
+        <form id="expenseForm" method="POST" action="{{ url_for('main.expense_report', app_id=req.id) }}" enctype="multipart/form-data">
+            <div class="row g-5">
+                
+                <!-- Left Column: Budget Details & Instructions -->
+                <div class="col-md-4 border-end">
+                    <h5 class="fw-bold mb-4" style="color: var(--brand-primary); border-bottom: 2px solid #F1F5F9; padding-bottom: 12px;">原申請預算細目</h5>
+                    <div class="card border-0 bg-light mb-4" style="border-radius: 12px;">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">住宿費</span>
+                                <span class="fw-bold text-dark">$ {{ "{:,.0f}".format(req.est_accommodation) }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">交通費</span>
+                                <span class="fw-bold text-dark">$ {{ "{:,.0f}".format(req.est_transportation) }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">伙食費</span>
+                                <span class="fw-bold text-dark">$ {{ "{:,.0f}".format(req.est_meals) }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-0">
+                                <span class="text-muted small">雜費</span>
+                                <span class="fw-bold text-dark">$ {{ "{:,.0f}".format(req.est_misc) }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h5 class="fw-bold mb-4" style="color: var(--brand-primary); border-bottom: 2px solid #F1F5F9; padding-bottom: 12px;">公司核銷規定</h5>
+                    <div class="alert alert-info py-3 shadow-sm mb-4" style="border-radius: 12px; border-left: 5px solid var(--brand-primary);">
+                        <ul class="small mb-0 ps-3">
+                            <li><strong>住宿費</strong>: 平日上限 3,500 / 假日 4,500</li>
+                            <li><strong>交通費</strong>: 計程車上限 800/趟；高鐵標準車廂</li>
+                            <li><strong>伙食費</strong>: 早餐 75 / 午餐 150 / 晚餐 150</li>
+                            <li><strong>雜費</strong>: 無金額限制</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Right Column: Expense Details -->
+                <div class="col-md-8">
+
+                    <div class="mb-4">
+                        <h5 class="fw-bold m-0" style="color: var(--brand-primary); border-bottom: 2px solid #F1F5F9; padding-bottom: 12px;">報銷項目明細</h5>
+                    </div>
+                    
+                    <!-- Detail Items Header -->
+                    <div class="row fw-bold text-muted small border-bottom pb-2 mb-3 px-2">
+                        <div class="col-1 text-start"><i class="bi bi-qr-code-scan"></i></div>
+                        <div class="col-2 text-start">項目類型</div>
+                        <div class="col-2 text-start">日期</div>
+                        <div class="col-3 text-start">金額</div>
+                        <div class="col-3 text-start">地點</div>
+                        <div class="col-1 text-center"><i class="bi bi-trash3"></i></div>
+                    </div>
+
+                    <div id="expense-container">
+                        {% set expenses_to_show = req.expenses if req.expenses else [none] %}
+                        {% for expense in expenses_to_show %}
+                        <div class="expense-row row align-items-center mb-3 bg-light p-3 rounded-4 border border-light position-relative">
+                            <div class="col-1 text-start">
+                                <label class="btn btn-sm btn-outline-primary p-1 rounded-circle shadow-sm" style="width: 32px; height: 32px; cursor: pointer;" title="掃描單據">
+                                    <i class="bi bi-qr-code-scan fs-6"></i>
+                                    <input type="file" class="d-none" name="row_receipt[]" accept="image/*,application/pdf" capture="environment">
+                                </label>
+                            </div>
+                            
+                            <div class="col-2 text-start">
+                                <select class="form-select border-0 bg-white shadow-sm fw-medium expense-category" name="expense_category[]" style="font-size: 0.9rem; border-radius: 8px;">
+                                    <option value="交通費" {{ 'selected' if expense and expense.expense_category == '交通費' else '' }}>交通費</option>
+                                    <option value="住宿費" {{ 'selected' if expense and expense.expense_category == '住宿費' else '' }}>住宿費</option>
+                                    <option value="伙食費 (早餐)" {{ 'selected' if expense and expense.expense_category == '伙食費 (早餐)' else '' }}>伙食費 (早餐)</option>
+                                    <option value="伙食費 (午餐)" {{ 'selected' if expense and expense.expense_category == '伙食費 (午餐)' else '' }}>伙食費 (午餐)</option>
+                                    <option value="伙食費 (晚餐)" {{ 'selected' if expense and expense.expense_category == '伙食費 (晚餐)' else '' }}>伙食費 (晚餐)</option>
+                                    <option value="雜費" {{ 'selected' if expense and expense.expense_category == '雜費' else '' }}>雜費</option>
+                                </select>
+                            </div>
+                            <div class="col-2 text-start">
+                                <input type="date" class="form-control border-0 bg-white shadow-sm text-muted small" name="expense_date[]" value="{{ expense.expense_date if expense else req.start_date }}" style="border-radius: 8px;">
+                            </div>
+                            <div class="col-3 text-start">
+                                <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                                    <span class="input-group-text border-0 bg-white text-muted small">$</span>
+                                    <input type="number" class="form-control border-0 bg-white fw-bold text-dark text-start expense-amount" name="requested_amount[]" value="{{ expense.requested_amount|int if expense else 0 }}">
+                                </div>
+                            </div>
+                            <div class="col-3 text-start">
+                                <input type="text" class="form-control border-0 bg-white shadow-sm text-muted small text-start expense-descr" name="expense_name[]" value="{{ expense.expense_name if expense else '' }}" placeholder="請輸入地點..." style="border-radius: 8px;">
+                            </div>
+
+                            <div class="col-1 text-center">
+                                <button type="button" class="btn btn-outline-danger border-0 p-1 del-row-btn" onclick="this.closest('.expense-row').remove(); calculateTotal();">
+                                    <i class="bi bi-trash3 fs-5"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Validation Message & Note Field -->
+                            <div class="col-12 mt-2 validation-row d-none">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <i class="bi bi-exclamation-triangle-fill text-danger small"></i>
+                                    <span class="text-danger small fw-bold limit-warning">超過公司報銷限額</span>
+                                </div>
+                                <input type="text" class="form-control border-danger-subtle bg-white shadow-sm text-muted small expense-note" name="expense_note[]" value="{{ expense.expense_note if expense else '' }}" placeholder="請填寫超過限額的理由 (必填)..." style="border-radius: 8px;">
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-4 py-2" id="add-expense-btn" style="border-radius: 10px;">
+                            <i class="bi bi-plus-circle me-2"></i> 新增報銷項目
+                        </button>
+                    </div>
+
+                    <!-- Category Totals Summary (Horizontal Row) -->
+                    <div class="mt-5 border-top pt-4">
+                        <div class="card border-0 bg-light rounded-4 shadow-sm mb-4">
+                            <div class="card-body py-3 px-4">
+                                <div class="row align-items-center text-center">
+                                    <div class="col-3">
+                                        <div class="small text-muted fw-bold mb-1">住宿費總價</div>
+                                        <div class="fw-bold text-dark" id="total-accommodation">NT$ 0</div>
+                                    </div>
+                                    <div class="col-3 border-start border-2">
+                                        <div class="small text-muted fw-bold mb-1">交通費總價</div>
+                                        <div class="fw-bold text-dark" id="total-transportation">NT$ 0</div>
+                                    </div>
+                                    <div class="col-3 border-start border-2">
+                                        <div class="small text-muted fw-bold mb-1">伙食費總價</div>
+                                        <div class="fw-bold text-dark" id="total-meals">NT$ 0</div>
+                                    </div>
+                                    <div class="col-3 border-start border-2">
+                                        <div class="small text-muted fw-bold mb-1">雜費總價</div>
+                                        <div class="fw-bold text-dark" id="total-misc">NT$ 0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Final Grand Total -->
+                        <div class="d-flex justify-content-between align-items-center px-4 py-3 bg-white border border-2 border-primary rounded-4 shadow-sm">
+                            <h5 class="fw-bold mb-0 text-primary">報銷單總計金額</h5>
+                            <h4 class="fw-bold mb-0" style="color: var(--brand-secondary);" id="footerTotalDisplay">NT$ 0</h4>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="row mt-5 pt-4 border-top">
+                <div class="col-12 text-center d-flex gap-3 justify-content-center">
+                    <button type="button" onclick="location.href='{{ url_for('main.dashboard') }}'" class="btn btn-outline-secondary px-5 py-3 fw-bold" style="border-radius: 12px;">取消並返回</button>
+                    <button type="submit" class="btn px-5 py-3 fw-bold text-white shadow" style="background-color: var(--brand-primary); border-radius: 12px;">
+                        <i class="bi bi-printer me-2"></i>列印並送出
+                    </button>
+                </div>
+            </div>
+            
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const container = document.getElementById('expense-container');
+        const addBtn = document.getElementById('add-expense-btn');
+
+        // 公司限額定義
+        const LIMITS = {
+            '住宿費': { weekday: 3500, weekend: 4500 },
+            '伙食費 (早餐)': 75,
+            '伙食費 (午餐)': 150,
+            '伙食費 (晚餐)': 150,
+            '計程車': 800
+        };
+
+        // 儲存一個乾淨的模板供後續新增使用
+        const firstRow = container.querySelector('.expense-row');
+        const templateRow = firstRow.cloneNode(true);
+        // 清理模板中的值
+        templateRow.querySelectorAll('input').forEach(input => {
+            if(input.type === 'number') input.value = '0';
+            else if(input.type === 'file') input.value = '';
+            else if(input.type === 'text') {
+                if (!input.classList.contains('expense-note')) input.value = '';
+            }
+        });
+        templateRow.querySelector('.validation-row').classList.add('d-none');
+        templateRow.querySelector('.input-group').classList.remove('border', 'border-danger', 'rounded');
+
+        function isWeekend(dateStr) {
+            if (!dateStr) return false;
+            const date = new Date(dateStr);
+            const day = date.getDay();
+            return day === 0 || day === 6; // 0=Sun, 6=Sat
+        }
+
+        function checkLimit(row) {
+            const categorySelect = row.querySelector('.expense-category');
+            if (!categorySelect) return;
+            const category = categorySelect.value;
+            const amount = parseFloat(row.querySelector('.expense-amount').value) || 0;
+            const date = row.querySelector('input[type="date"]').value;
+            const descr = row.querySelector('.expense-descr').value;
+            const validationRow = row.querySelector('.validation-row');
+            const warningText = row.querySelector('.limit-warning');
+            const noteInput = row.querySelector('.expense-note');
+            const amountInputGroup = row.querySelector('.input-group');
+
+            let limit = Infinity;
+            let limitType = "";
+
+            if (category === '住宿費') {
+                const weekend = isWeekend(date);
+                limit = weekend ? LIMITS['住宿費'].weekend : LIMITS['住宿費'].weekday;
+                limitType = weekend ? "假日上限 4,500" : "平日上限 3,500";
+            } else if (category.includes('伙食費')) {
+                limit = LIMITS[category] || Infinity;
+                limitType = `上限 ${limit}`;
+            } else if (category === '交通費' && (descr.includes('計程車') || descr.includes('Taxi'))) {
+                limit = LIMITS['計程車'];
+                limitType = "計程車單趟上限 800";
+            }
+
+            if (amount > limit) {
+                validationRow.classList.remove('d-none');
+                warningText.innerText = `已超過${limitType}，請填寫說明`;
+                amountInputGroup.classList.add('border', 'border-danger', 'rounded');
+                noteInput.setAttribute('required', 'required');
+            } else {
+                validationRow.classList.add('d-none');
+                amountInputGroup.classList.remove('border', 'border-danger', 'rounded');
+                noteInput.removeAttribute('required');
+            }
+        }
+
+        // 計算總金額與類別合計
+        function calculateTotal() {
+            let total = 0;
+            let catTotals = {
+                '住宿費': 0,
+                '交通費': 0,
+                '伙食費': 0,
+                '雜費': 0
+            };
+
+            const rows = document.querySelectorAll('.expense-row');
+            rows.forEach(row => {
+                const catElement = row.querySelector('.expense-category');
+                if (!catElement) return;
+                const cat = catElement.value;
+                const amountInput = row.querySelector('.expense-amount');
+                if (!amountInput) return;
+                const amount = parseFloat(amountInput.value) || 0;
+                total += amount;
+
+                if (cat === '住宿費') catTotals['住宿費'] += amount;
+                else if (cat === '交通費') catTotals['交通費'] += amount;
+                else if (cat.includes('伙食費')) catTotals['伙食費'] += amount;
+                else if (cat === '雜費') catTotals['雜費'] += amount;
+            });
+
+            if (document.getElementById('footerTotalDisplay')) {
+                document.getElementById('footerTotalDisplay').innerText = 'NT$ ' + total.toLocaleString();
+            }
+            document.getElementById('total-accommodation').innerText = 'NT$ ' + catTotals['住宿費'].toLocaleString();
+            document.getElementById('total-transportation').innerText = 'NT$ ' + catTotals['交通費'].toLocaleString();
+            document.getElementById('total-meals').innerText = 'NT$ ' + catTotals['伙食費'].toLocaleString();
+            document.getElementById('total-misc').innerText = 'NT$ ' + catTotals['雜費'].toLocaleString();
+        }
+
+        // 監聽變動
+        container.addEventListener('input', function(e) {
+            const row = e.target.closest('.expense-row');
+            if (row) {
+                if (e.target.classList.contains('expense-amount')) {
+                    calculateTotal();
+                }
+                checkLimit(row);
+            }
+        });
+
+        container.addEventListener('change', function(e) {
+            const row = e.target.closest('.expense-row');
+            if (row) {
+                checkLimit(row);
+                if (e.target.classList.contains('expense-category')) {
+                    calculateTotal();
+                }
+            }
+        });
+
+        // 新增明細行
+        addBtn.addEventListener('click', function() {
+            const row = templateRow.cloneNode(true);
+            container.appendChild(row);
+            calculateTotal();
+        });
+
+        // 初始化
+        document.querySelectorAll('.expense-row').forEach(checkLimit);
+        calculateTotal();
+    });
+</script>
+{% endblock %}
