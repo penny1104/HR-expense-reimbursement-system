@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_password_here
+      POSTGRES_DB: travel_expense
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=travel_expense
+      - DB_USER=postgres
+      - DB_PASSWORD=your_password_here
+      - FLASK_DEBUG=1
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
