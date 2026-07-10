@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}HR 差旅報銷系統{% endblock %}</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --brand-primary: #22277F;
+            --brand-primary-light: rgba(255, 255, 255, 0.15); /* Updated for dark mode */
+            --brand-secondary: #47704C;
+            --bg-color: #F8FAFC;
+            --text-color: #1E293B;
+            --sidebar-width: 260px;
+            --sidebar-collapsed-width: 80px;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Outfit', sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Sidebar Styling (Blue) */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background-color: var(--brand-primary);
+            color: white;
+            box-shadow: 2px 0 20px rgba(0,0,0,0.1);
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            padding-top: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        body.sidebar-collapsed .sidebar {
+            width: var(--sidebar-collapsed-width);
+        }
+
+        .brand-logo-container {
+            padding: 0 1.5rem 2rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .brand-logo-container img { 
+            max-height: 40px; 
+            object-fit: contain;
+            /* If logo is dark, we might need a white version or brightness invert but let's assume it has white text/usable on dark */
+        }
+        
+        body.sidebar-collapsed .brand-text {
+            display: none;
+        }
+
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0.25rem 1rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        body.sidebar-collapsed .sidebar .nav-link {
+            padding: 0.75rem;
+            justify-content: center;
+            margin: 0.25rem 0.5rem;
+        }
+        body.sidebar-collapsed .nav-text {
+            display: none;
+        }
+
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            color: white;
+            background-color: var(--brand-primary-light);
+        }
+
+        .sidebar-user {
+            margin-top: auto;
+            padding: 1.5rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        body.sidebar-collapsed .sidebar-user-details {
+            display: none;
+        }
+
+        /* Top Navbar */
+        .top-navbar {
+            margin-left: var(--sidebar-width);
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            padding: 0.75rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            min-height: 70px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.sidebar-collapsed .top-navbar {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--brand-primary);
+            cursor: pointer;
+        }
+
+        .logout-btn {
+            color: var(--brand-primary);
+            border: 1px solid var(--brand-primary);
+            border-radius: 8px;
+            padding: 0.4rem 1.2rem;
+            text-decoration: none;
+        }
+        .logout-btn:hover {
+            background-color: var(--brand-primary);
+            color: white;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 2rem;
+            min-height: 100vh;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        body.sidebar-collapsed .main-content {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+
+        /* Floating Chat Widget Styles */
+        .floating-chat-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 2000;
+        }
+        .floating-chat {
+            background-color: var(--brand-primary);
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 15px rgba(34, 39, 127, 0.3);
+            cursor: pointer;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .floating-chat:hover {
+            transform: scale(1.1);
+        }
+        .chat-window {
+            width: 350px;
+            height: 480px;
+            background: white;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: absolute;
+            bottom: 80px;
+            right: 0;
+            border: 1px solid rgba(0,0,0,0.08);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: bottom right;
+        }
+        .chat-header {
+            background-color: var(--brand-primary);
+            color: white;
+            padding: 12px 16px;
+        }
+        .chat-avatar {
+            width: 36px;
+            height: 36px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chat-body {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            background-color: #F8FAFC;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .chat-message {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            animation: chatFadeIn 0.25s ease-out;
+        }
+        .bot-msg {
+            background-color: white;
+            color: var(--text-color);
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            border: 1px solid #F1F5F9;
+        }
+        .user-msg {
+            background-color: var(--brand-primary);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+            box-shadow: 0 2px 5px rgba(34,39,127,0.1);
+        }
+        .chat-footer {
+            padding: 12px 16px;
+            border-top: 1px solid #E2E8F0;
+            background: white;
+        }
+        .quick-questions button {
+            transition: all 0.2s;
+            border-color: rgba(34, 39, 127, 0.2);
+            color: var(--brand-primary);
+            background: white;
+        }
+        .quick-questions button:hover {
+            background-color: var(--brand-primary);
+            color: white;
+            border-color: var(--brand-primary);
+        }
+        @keyframes chatFadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .typing-indicator {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            padding: 10px 14px;
+        }
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            background: #94A3B8;
+            border-radius: 50%;
+            animation: chatBounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes chatBounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="brand-logo-container">
+            <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="HR Logo" style="background: white; padding: 2px; border-radius: 4px;">
+            <span class="fs-5 fw-bold brand-text" style="color: white;">HR 系統</span>
+        </div>
+        <ul class="nav flex-column gap-1">
+            <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}" title="差旅報銷中心"><i class="bi bi-speedometer2"></i> <span class="nav-text">差旅報銷中心</span></a></li>
+            <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.progress' %}active{% endif %}" href="{{ url_for('main.progress') }}" title="查看報銷進度"><i class="bi bi-clock-history"></i> <span class="nav-text">進度追蹤</span></a></li>
+            {% if current_user.role in ['Manager', 'Accountant'] %}
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.approvals' %}active{% endif %}" href="{{ url_for('main.approvals') }}" title="簽核中心">
+                    <i class="bi bi-check-circle"></i> <span class="nav-text">簽核中心</span>
+                </a>
+            </li>
+            {% endif %}
+
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.receipts' %}active{% endif %}" href="{{ url_for('main.receipts') }}" title="憑證檔案庫">
+                    <i class="bi bi-archive"></i> <span class="nav-text">憑證檔案庫</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'main.history' %}active{% endif %}" href="{{ url_for('main.history') }}" title="歷史紀錄">
+                    <i class="bi bi-journal-text"></i> <span class="nav-text">歷史紀錄</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <div class="top-navbar">
+        <div class="d-flex align-items-center flex-grow-1">
+            <button class="toggle-btn me-3" id="sidebarToggle" aria-label="Toggle Sidebar">
+                <i class="bi bi-list"></i>
+            </button>
+            <div id="page-header-content">
+                {% block content_header %}{% endblock %}
+            </div>
+        </div>
+        
+        <div class="d-flex align-items-center gap-4">
+            {% if current_user.is_authenticated %}
+            <div class="d-flex align-items-center gap-2">
+                <img src="https://ui-avatars.com/api/?name={{ current_user.name }}&background=E2E8F0&color=22277F&rounded=true" alt="Avatar" width="40" height="40" class="rounded-circle shadow-sm">
+                <div class="d-none d-md-block text-end">
+                    <div class="fw-bold" style="color: var(--brand-primary); line-height: 1.2;">你好~{{ current_user.name }}</div>
+                    <div class="text-muted small" style="font-size:0.75rem;">
+                        {% if current_user.role == 'Manager' %}
+                            主管介面
+                        {% elif current_user.role == 'Accountant' %}
+                            會計介面
+                        {% else %}
+                            員工介面
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            <a class="logout-btn" href="{{ url_for('main.logout') }}"><i class="bi bi-box-arrow-right"></i> 登出</a>
+        </div>
+    </div>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Floating Chat Widget -->
+    <div class="floating-chat-container d-print-none">
+        <!-- Chat Window -->
+        <div class="chat-window shadow-lg d-none" id="chatWindow">
+            <!-- Header -->
+            <div class="chat-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="chat-avatar position-relative">
+                        <i class="bi bi-robot fs-4 text-white"></i>
+                        <span class="position-absolute bottom-0 end-0 translate-middle p-1 bg-success border border-light rounded-circle" style="width: 8px; height: 8px;"></span>
+                    </div>
+                    <div>
+                        <div class="fw-bold text-white small" style="line-height: 1.2;">HR 智能小助手</div>
+                        <span class="text-white-50" style="font-size: 0.7rem;">在線解答中</span>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" id="closeChatBtn" aria-label="Close"></button>
+            </div>
+            
+            <!-- Message Body -->
+            <div class="chat-body" id="chatBody">
+                <div class="chat-message bot-msg">您好！我是 HR 差旅報銷小助手。請問今天有什麼我可以幫您的？</div>
+                <div class="quick-questions mt-2">
+                    <div class="small text-muted mb-2 fw-semibold">快捷問題諮詢：</div>
+                    <div class="d-flex flex-wrap gap-1">
+                        <button type="button" class="btn btn-xs btn-outline-primary py-1 px-2 text-start rounded-pill quick-q-btn" style="font-size: 0.75rem;">如何填寫報銷單？</button>
+                        <button type="button" class="btn btn-xs btn-outline-primary py-1 px-2 text-start rounded-pill quick-q-btn" style="font-size: 0.75rem;">各科目核銷上限？</button>
+                        <button type="button" class="btn btn-xs btn-outline-primary py-1 px-2 text-start rounded-pill quick-q-btn" style="font-size: 0.75rem;">OCR 辨識出錯怎麼辦？</button>
+                        <button type="button" class="btn btn-xs btn-outline-primary py-1 px-2 text-start rounded-pill quick-q-btn" style="font-size: 0.75rem;">報銷進度如何查詢？</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer Input -->
+            <div class="chat-footer">
+                <div class="input-group">
+                    <input type="text" id="chatInput" class="form-control" placeholder="請輸入您的問題..." style="border-radius: 20px 0 0 20px; font-size: 0.85rem; border-color: #E2E8F0;">
+                    <button class="btn btn-primary px-3" type="button" id="sendChatBtn" style="border-radius: 0 20px 20px 0; background-color: var(--brand-primary); border: none;">
+                        <i class="bi bi-send-fill text-white"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Chat Button -->
+        <div class="floating-chat" id="floatingChatBtn" title="幫助與支援">
+            <i class="bi bi-chat-dots-fill"></i>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('sidebarToggle').addEventListener('click', function() {
+            document.body.classList.toggle('sidebar-collapsed');
+        });
+
+        // 自動隱藏臨時通知 (帶有 alert-dismissible 類別的 Flash Messages)
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert-dismissible');
+            alerts.forEach(function(alert) {
+                setTimeout(function() {
+                    let bsAlert = new bootstrap.Alert(alert);
+                    if (bsAlert) {
+                        bsAlert.close();
+                    }
+                }, 3000); 
+            });
+        });
+
+        // 聊天機器人互動邏輯
+        const chatWindow = document.getElementById('chatWindow');
+        const floatingChatBtn = document.getElementById('floatingChatBtn');
+        const closeChatBtn = document.getElementById('closeChatBtn');
+        const chatInput = document.getElementById('chatInput');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+        const chatBody = document.getElementById('chatBody');
+
+        if (floatingChatBtn) {
+            floatingChatBtn.addEventListener('click', function() {
+                chatWindow.classList.toggle('d-none');
+                chatInput.focus();
+                chatBody.scrollTop = chatBody.scrollHeight;
+            });
+        }
+
+        if (closeChatBtn) {
+            closeChatBtn.addEventListener('click', function() {
+                chatWindow.classList.add('d-none');
+            });
+        }
+
+        function appendMessage(text, isUser = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-message ' + (isUser ? 'user-msg' : 'bot-msg');
+            msgDiv.innerHTML = text;
+            chatBody.appendChild(msgDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const indicatorDiv = document.createElement('div');
+            indicatorDiv.className = 'chat-message bot-msg typing-indicator';
+            indicatorDiv.id = 'typingIndicator';
+            indicatorDiv.innerHTML = '<span></span><span></span><span></span>';
+            chatBody.appendChild(indicatorDiv);
+            chatBody.scrollTop = chatBody.scrollHeight;
+            return indicatorDiv;
+        }
+
+        function removeTypingIndicator(indicator) {
+            if (indicator && indicator.parentNode) {
+                indicator.parentNode.removeChild(indicator);
+            }
+        }
+
+
+        function handleSend(textToSend) {
+            const text = textToSend || chatInput.value.trim();
+            if (!text) return;
+            
+            if (!textToSend) {
+                appendMessage(text, true);
+                chatInput.value = '';
+            }
+            
+            const indicator = showTypingIndicator();
+            
+            fetch('/api/chatbot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message: text })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('API error');
+                return res.json();
+            })
+            .then(data => {
+                removeTypingIndicator(indicator);
+                appendBotResponse(data.answer, data.suggestions);
+            })
+            .catch(err => {
+                removeTypingIndicator(indicator);
+                appendMessage('抱歉，伺服器連線異常，請稍後再試。', false);
+            });
+        }
+
+        function appendBotResponse(answer, suggestions) {
+            // 1. Append bot message
+            appendMessage(answer, false);
+            
+            // 2. If there are suggestions, append them as clickable pills
+            if (suggestions && suggestions.length > 0) {
+                const suggDiv = document.createElement('div');
+                suggDiv.className = 'quick-questions mt-2 align-self-start';
+                suggDiv.style.maxWidth = '85%';
+                suggDiv.style.animation = 'chatFadeIn 0.25s ease-out';
+                
+                let html = '<div class="d-flex flex-wrap gap-1">';
+                suggestions.forEach(sug => {
+                    html += `<button type="button" class="btn btn-xs btn-outline-primary py-1 px-2 text-start rounded-pill quick-q-btn" style="font-size: 0.75rem;">${sug}</button>`;
+                });
+                html += '</div>';
+                suggDiv.innerHTML = html;
+                chatBody.appendChild(suggDiv);
+                chatBody.scrollTop = chatBody.scrollHeight;
+            }
+        }
+
+        if (sendChatBtn) {
+            sendChatBtn.addEventListener('click', function() { handleSend(); });
+        }
+
+        if (chatInput) {
+            chatInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    handleSend();
+                }
+            });
+        }
+
+        chatBody.addEventListener('click', function(e) {
+            const quickBtn = e.target.closest('.quick-q-btn');
+            if (quickBtn) {
+                const qText = quickBtn.innerText;
+                appendMessage(qText, true);
+                handleSend(qText);
+            }
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+
+{% block content_header %}
+<h4 class="mb-0 fw-bold">憑證資料庫</h4>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-6">
+        <p class="text-muted mb-0">在此查看您上傳過的所有電子收據與憑證檔案。</p>
+    </div>
+    <div class="col-md-6 text-md-end mt-3 mt-md-0">
+        <div class="btn-group">
+            <button id="btn-grid" class="btn btn-outline-primary active" style="border-radius: 8px 0 0 8px;">網格顯示</button>
+            <button id="btn-list" class="btn btn-outline-primary" style="border-radius: 0 8px 8px 0;">列表顯示</button>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4" id="receipts-container">
+    {% for rec in receipts %}
+    <div class="col-sm-6 col-lg-4 col-xl-3 receipts-item">
+        <div class="card border-0 shadow-sm h-100 receipt-card" style="border-radius: 20px; transition: transform 0.2s;">
+            <div class="card-body p-4 d-flex flex-column">
+                
+                <!-- Top Section: Icon, Category & Name -->
+                <div class="d-flex align-items-center gap-3 mb-3 info-header">
+                    <div class="p-3 bg-primary-subtle text-primary rounded-4 flex-shrink-0 icon-wrapper">
+                        <i class="bi bi-file-earmark-image fs-4"></i>
+                    </div>
+                    <div class="overflow-hidden flex-grow-1 text-start name-wrapper">
+                        <span class="badge bg-light text-dark border mb-1 category-badge">{{ rec.expense_category }}</span>
+                        <h6 class="fw-bold text-dark mb-0 text-truncate expense-title">{{ rec.expense_name }}</h6>
+                    </div>
+                </div>
+                
+                <!-- Mid Section: Date & Project ID -->
+                <div class="mb-4 date-project-wrapper">
+                    <div class="small text-muted mb-1"><i class="bi bi-calendar3 me-1"></i> {{ rec.expense_date }}</div>
+                    <div class="small text-muted"><i class="bi bi-link-45deg me-1"></i> 來自案件 #{{ rec.request_id }}</div>
+                </div>
+                
+                <!-- Bottom Section: Amount & Action Link -->
+                <div class="d-flex justify-content-between align-items-center mt-auto action-footer">
+                    <span class="fs-5 fw-bold text-primary amount-display">${{ "{:,.0f}".format(rec.requested_amount) }}</span>
+                    {% if rec.receipt_path %}
+                    <button type="button" class="btn btn-link text-decoration-none p-0 small preview-link btn-preview-receipt" data-file-url="{{ rec.receipt_path }}" data-bs-toggle="modal" data-bs-target="#receiptPreviewModal">查看原始檔 <i class="bi bi-eye"></i></button>
+                    {% else %}
+                    <span class="text-muted small">無檔案</span>
+                    {% endif %}
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
+            <i class="bi bi-archive fs-1 d-block mb-3"></i>
+            目前尚無憑證資料
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+    .receipt-card:hover {
+        transform: translateY(-5px);
+    }
+
+    /* 列表顯示模式專屬樣式 */
+    #receipts-container.view-list .receipts-item {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+    
+    #receipts-container.view-list .receipt-card {
+        border-radius: 12px !important;
+    }
+
+    #receipts-container.view-list .receipt-card:hover {
+        transform: translateY(-2px);
+    }
+
+    #receipts-container.view-list .receipt-card .card-body {
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        padding: 16px 24px !important;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    #receipts-container.view-list .info-header {
+        margin-bottom: 0 !important;
+        flex: 2 1 250px;
+    }
+
+    #receipts-container.view-list .date-project-wrapper {
+        margin-bottom: 0 !important;
+        flex: 1.5 1 180px;
+        text-align: left;
+    }
+
+    #receipts-container.view-list .action-footer {
+        margin-top: 0 !important;
+        flex: 2 1 220px;
+        justify-content: flex-end !important;
+        gap: 24px;
+    }
+</style>
+
+<!-- 憑證影像預覽視窗 Modal -->
+<div class="modal fade" id="receiptPreviewModal" tabindex="-1" aria-labelledby="receiptPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header border-0 bg-light py-3 px-4">
+                <h5 class="modal-title fw-bold text-primary d-flex align-items-center gap-2" id="receiptPreviewModalLabel">
+                    <i class="bi bi-image fs-4"></i> 原始憑證檔案預覽
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-dark d-flex align-items-center justify-content-center" style="min-height: 400px;">
+                <img id="previewModalImg" src="" class="img-fluid rounded border shadow-sm" style="max-height: 70vh; display: block; margin: 0 auto; object-fit: contain;">
+            </div>
+            <div class="modal-footer border-0 py-3 px-4 bg-light">
+                <button type="button" class="btn btn-secondary px-4 py-2 fw-bold w-100" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    關閉預覽
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const btnGrid = document.getElementById('btn-grid');
+        const btnList = document.getElementById('btn-list');
+        const container = document.getElementById('receipts-container');
+
+        function showGrid() {
+            btnGrid.classList.add('active');
+            btnList.classList.remove('active');
+            container.classList.remove('view-list');
+            localStorage.setItem('receipts-view', 'grid');
+        }
+
+        function showList() {
+            btnList.classList.add('active');
+            btnGrid.classList.remove('active');
+            container.classList.add('view-list');
+            localStorage.setItem('receipts-view', 'list');
+        }
+
+        btnGrid.addEventListener('click', showGrid);
+        btnList.addEventListener('click', showList);
+
+        // 載入時回復使用者之前的視圖設定偏好
+        const savedView = localStorage.getItem('receipts-view');
+        if (savedView === 'list') {
+            showList();
+        } else {
+            showGrid();
+        }
+
+        // 憑證預覽 Modal 圖片設定
+        document.querySelectorAll('.btn-preview-receipt').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const fileUrl = this.dataset.fileUrl;
+                if (fileUrl) {
+                    document.getElementById('previewModalImg').src = fileUrl;
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

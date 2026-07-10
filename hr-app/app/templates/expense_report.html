@@ -1,0 +1,2099 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% set taiwan_regions = ["基隆市", "台北市", "新北市", "桃園市", "新竹市", "新竹縣", "苗栗縣", "台中市", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "台南市", "高雄市", "屏東縣", "宜蘭縣", "花蓮縣", "台東縣", "澎湖縣", "金門縣", "連江縣", "其他(海外)"] %}
+<style>
+    /* 違規與超限警示：紅色框框 */
+    .border-violation {
+        border: 2px solid #ef4444 !important;
+        background-color: #fef2f2 !important;
+        box-shadow: 0 0 0 0.2rem rgba(239, 68, 68, 0.15) !important;
+        border-radius: 8px !important;
+    }
+
+    /* 使用者手動修改標示：藍色框框 */
+    .border-modified {
+        border: 2px solid #2563eb !important;
+        background-color: #f0f9ff !important;
+        box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15) !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease;
+    }
+
+    /* 需要自行填寫或確認：亮藍色框框 */
+    .border-need-fill {
+        border: 2px solid #2563eb !important;
+        background-color: #f0f9ff !important;
+        box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.15) !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease;
+    }
+
+    /* 欄位未填寫震動提示 */
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        15%, 45%, 75% { transform: translateX(-6px); }
+        30%, 60%, 90% { transform: translateX(6px); }
+    }
+    .shake-element {
+        animation: shake 0.4s ease-in-out !important;
+    }
+
+    /* 預覽列印專用樣式 */
+    @media print {
+        /* 設定 A4 標準尺寸與邊距 */
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+
+        /* 隱藏導覽列、側邊政策規定欄、所有按鈕、彈出視窗、頂部 Navbar、退回警示框與右下角客服浮動按鈕 */
+        .navbar, nav, sidebar, .col-xxl-2, .border-end, .btn, #btn-submit-trigger, .del-row-btn, label[title="掃描單據"], .btn-preview-receipt, .modal, .modal-backdrop, .top-navbar, .alert-danger, .floating-chat {
+            display: none !important;
+        }
+        
+        /* 移除外圍 margin，讓主內容區在列印時 100% 滿版往左拉滿 */
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        .col-xxl-10, .col-xl-9, .col-lg-8 {
+            width: 100% !important;
+            flex: 0 0 100% !important;
+            max-width: 100% !important;
+        }
+        
+        /* 移除大卡片陰影與多餘內距，使其適應 A4 紙張 */
+        .card {
+            box-shadow: none !important;
+            border: none !important;
+            background: transparent !important;
+        }
+        .card-body {
+            padding: 0 !important;
+        }
+        
+        /* 移除明細容器的滾動條，寬度設為 100% */
+        .expense-table-container {
+            overflow: visible !important;
+        }
+        .expense-table-container > div {
+            min-width: 100% !important;
+            width: 100% !important;
+        }
+
+        /* 將輸入框、下拉選單轉換為純文字樣式 (移除邊框、背景與箭頭樣式) */
+        input, select {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            appearance: none !important;
+            -webkit-appearance: none !important;
+            color: #000 !important;
+            padding: 0 !important;
+            pointer-events: none !important;
+            font-size: 10pt !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            white-space: nowrap !important;
+            text-overflow: clip !important;
+        }
+        
+        /* 隱藏垃圾桶刪除列寬度 */
+        .del-row-btn, .bi-trash3, .text-center button {
+            display: none !important;
+        }
+        
+        /* 僅移除警告紅框、確認藍框與手動修改藍框的邊框，維持列印整潔，千萬不可使用 display:none 隱藏數據 */
+        .border-violation, .border-modified, .border-need-fill, .input-group {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        
+        .input-group-text {
+            border: none !important;
+            background: transparent !important;
+            display: none !important; /* 隱藏金額前的 $ 符號，使其更乾淨 */
+        }
+
+        /* 超額警告列隱藏警示字樣，但保留說明的備註 input */
+        .validation-row {
+            border-top: 1px dashed #ccc !important;
+        }
+        .validation-row .d-flex {
+            display: none !important; /* 隱藏 超過公司報銷限額 的警告標籤 */
+        }
+        .expense-note {
+            border-bottom: 1px dotted #000 !important; /* 給備註加一條精細的下劃線方便看 */
+            width: 100% !important;
+        }
+
+        /* 顯示列印專用 A4 最上方浮貼條 */
+        .print-only-affix {
+            display: block !important;
+        }
+
+        /* 報銷明細列排版優化：隱藏最左側憑證按鈕欄與最右側垃圾桶欄 */
+        .expense-row > div:first-child > div:first-child,
+        .expense-table-container .fw-bold.text-muted.small.border-bottom > div:first-child {
+            display: none !important;
+        }
+        .expense-row > div:first-child > div:last-child,
+        .expense-table-container .fw-bold.text-muted.small.border-bottom > div:last-child {
+            display: none !important;
+        }
+        
+        /* 調整表格每一列的寬度分配，在 A4 上完美拉寬 */
+        .expense-row {
+            background: #fff !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+            border-radius: 0 !important;
+            padding: 8px 0 !important;
+        }
+        
+        /* 前後表頭與數據欄位完美彈性拉寬對齊 */
+        .expense-table-container .border-bottom > div:nth-child(2),
+        .expense-row > div:first-child > div:nth-child(2) {
+            flex: 1.3 1 0px !important;
+            width: auto !important;
+        }
+        .expense-table-container .border-bottom > div:nth-child(3),
+        .expense-row > div:first-child > div:nth-child(3) {
+            flex: 0.8 1 0px !important;
+            width: auto !important;
+        }
+        .expense-table-container .border-bottom > div:nth-child(4),
+        .expense-row > div:first-child > div:nth-child(4) {
+            flex: 2 1 0px !important;
+            width: auto !important;
+        }
+        .expense-table-container .border-bottom > div:nth-child(5),
+        .expense-row > div:first-child > div:nth-child(5) {
+            flex: 0.8 1 0px !important;
+            width: auto !important;
+        }
+        .expense-table-container .border-bottom > div:nth-child(6),
+        .expense-row > div:first-child > div:nth-child(6) {
+            flex: 1.5 1 0px !important;
+            width: auto !important;
+        }
+        .expense-table-container .border-bottom > div:nth-child(7),
+        .expense-row > div:first-child > div:nth-child(7) {
+            flex: 1.2 1 0px !important;
+            width: auto !important;
+        }
+        .expense-table-container .border-bottom > div:nth-child(8),
+        .expense-row > div:first-child > div:nth-child(8) {
+            flex: 1.2 1 0px !important;
+            width: auto !important;
+        }
+
+        /* 預算不符說明列印樣式優化 */
+        #budget-mismatch-section {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin-top: 15px !important;
+        }
+        #budget-mismatch-section .card {
+            border: none !important;
+            background-color: transparent !important;
+            padding: 0 !important;
+        }
+        .mismatch-explanation {
+            border-bottom: 1px dotted #000 !important;
+            width: 100% !important;
+        }
+        .d-print-inline {
+            display: inline !important;
+        }
+    }
+</style>
+
+<!-- 列印專用浮貼提示框 (日常網頁畫面上隱藏) -->
+<div class="print-only-affix d-none text-center py-2 mb-4" style="border: 2px dashed #94a3b8; letter-spacing: 4px; font-size: 0.95rem; border-radius: 8px; font-weight: 700; color: #64748b; background-color: #f8fafc;">
+    (請浮貼)
+</div>
+
+<div class="row mb-4 align-items-center">
+    <div class="col-12 text-center pb-3 border-bottom">
+        <h2 class="fw-bold" style="color: var(--brand-primary);">填寫報銷單 - {{ req.destination }}</h2>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12 text-center text-muted">
+        <span class="me-4 fw-medium">原差旅申請單號: TQ{{ "%06d" % req.id }}</span>
+        <span class="me-4 fw-medium">出差日期: {{ req.start_date }}</span>
+        <span class="fw-medium text-dark">預算總額: <span style="color: var(--brand-secondary);">NT$ {{ "{:,.0f}".format(req.est_accommodation + req.est_transportation + req.est_meals + req.est_misc) }}</span></span>
+    </div>
+</div>
+
+{% if req.review_comment and req.status == 'Rejected' %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-danger border-0 shadow-sm d-flex align-items-start gap-3 p-4" style="border-radius: 16px; background-color: #FEF2F2; border-left: 5px solid #EF4444 !important;">
+            <i class="bi bi-exclamation-circle-fill fs-4 mt-1" style="color: #EF4444;"></i>
+            <div>
+                <div class="fw-bold mb-1" style="color: #991B1B; font-size: 1.1rem;">此報銷單已被退回修改，退回原因：</div>
+                <div class="text-danger fw-semibold" style="font-size: 1.05rem;">{{ req.review_comment }}</div>
+                <div class="small text-muted mt-2">請根據審查意見修正下方明細，並重新點擊「列印並送出」。</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm border-0 bg-white" style="border-radius: 20px;">
+    <div class="card-body p-4 p-md-5">
+        <form id="expenseForm" method="POST" action="{{ url_for('main.expense_report', app_id=req.id) }}" enctype="multipart/form-data">
+            <div class="row g-5">
+                
+                <!-- Expanded Expense Details -->
+                <div class="col-12">
+
+                    <div class="mb-4">
+                        <h5 class="fw-bold m-0" style="color: var(--brand-primary); border-bottom: 2px solid #F1F5F9; padding-bottom: 12px;">報銷項目明細</h5>
+                    </div>
+                    
+                    <!-- Detail Items Table Wrapper for Horizontal Scroll on Small Screens -->
+                    <div class="expense-table-container mb-3" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                        <div style="min-width: 1080px;">
+                            <!-- Detail Items Header -->
+                            <div class="d-flex align-items-center gap-2 fw-bold text-muted small border-bottom pb-2 mb-3" style="padding: 0 17px;">
+                                <div style="width: 80px;" class="text-center"><i class="bi bi-file-earmark-text"></i> 憑證</div>
+                                <div style="width: 150px;">日期</div>
+                                <div style="width: 150px;">類別</div>
+                                <div style="flex: 1.5 1 0px; min-width: 150px;">費用名稱</div>
+                                <div style="width: 130px;">金額</div>
+                                <div style="width: 135px;">憑證類型</div>
+                                <div style="width: 120px;">統一編號</div>
+                                <div style="flex: 1.2 1 0px; min-width: 120px;">地點</div>
+                                <div style="width: 40px;" class="text-center"><i class="bi bi-trash3"></i></div>
+                            </div>
+
+                            <div id="expense-container">
+                                {% set expenses_to_show = req.expenses if req.expenses else [none] %}
+                                {% for expense in expenses_to_show %}
+                                <div class="expense-row mb-3 bg-light p-3 rounded-4 border border-light position-relative">
+                                    <!-- Inputs Row -->
+                                    <div class="d-flex align-items-center gap-2">
+                                        <!-- Scan & Preview -->
+                                        <div style="width: 80px;" class="text-center d-flex justify-content-center gap-1">
+                                            <label class="btn btn-sm btn-outline-primary p-0 rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; cursor: pointer; margin-bottom: 0;" title="掃描單據">
+                                                <i class="bi bi-qr-code-scan fs-6"></i>
+                                                <input type="file" class="d-none row-receipt-input" name="row_receipt[]" accept="image/*,application/pdf" capture="environment">
+                                            </label>
+                                            <button type="button" class="btn btn-sm {% if expense and expense.receipt_path %}btn-outline-success{% else %}btn-outline-secondary{% endif %} p-0 rounded-circle shadow-sm d-flex align-items-center justify-content-center btn-preview-receipt" style="width: 32px; height: 32px;" title="查看憑證檔案" {% if expense and expense.receipt_path %}data-file-url="{{ expense.receipt_path }}"{% else %}disabled{% endif %} data-user-uploaded="{{ 'true' if expense and expense.is_receipt_user_uploaded else 'false' }}">
+                                                <i class="bi bi-eye fs-6"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Date -->
+                                        <div style="width: 150px;">
+                                            <input type="date" class="form-control border-0 bg-white shadow-sm text-muted small px-2" name="expense_date[]" value="{{ expense.expense_date if expense else '' }}" data-ocr-value="{{ expense.ocr_date.isoformat() if expense and expense.ocr_date else '' }}" style="border-radius: 8px;">
+                                        </div>
+                                        
+                                        <!-- Category -->
+                                        <div style="width: 150px;">
+                                            <select class="form-select border-0 bg-white shadow-sm fw-medium expense-category px-2" name="expense_category[]" data-ocr-value="{{ expense.ocr_category if expense and expense.ocr_category else '' }}" style="font-size: 0.9rem; border-radius: 8px;">
+                                                <option value="" disabled {{ 'selected' if not expense or not expense.expense_category else '' }}>請選擇類別...</option>
+                                                <option value="交通費" {{ 'selected' if expense and expense.expense_category == '交通費' else '' }}>交通費</option>
+                                                <option value="住宿費" {{ 'selected' if expense and expense.expense_category == '住宿費' else '' }}>住宿費</option>
+                                                <option value="伙食費" {{ 'selected' if expense and expense.expense_category == '伙食費' else '' }}>伙食費</option>
+                                                <option value="雜費" {{ 'selected' if expense and expense.expense_category == '雜費' else '' }}>雜費</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Expense Item (費用名稱) -->
+                                        <div style="flex: 1.5 1 0px; min-width: 150px;">
+                                            <input type="text" class="form-control border-0 bg-white shadow-sm text-muted small px-2" name="expense_name[]" value="{{ expense.expense_name if expense else '' }}" data-ocr-value="{{ expense.ocr_expense_name if expense and expense.ocr_expense_name else '' }}" placeholder="高鐵票、便當等..." style="border-radius: 8px;">
+                                        </div>
+                                        
+                                        <!-- Amount (金額) -->
+                                        <div style="width: 130px;">
+                                            <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                                                <span class="input-group-text border-0 bg-white text-muted small px-2">$</span>
+                                                <input type="number" class="form-control border-0 bg-white fw-bold text-dark px-1 expense-amount" name="requested_amount[]" value="{{ expense.requested_amount|int if expense else '' }}" data-ocr-value="{{ expense.ocr_amount|int if expense and expense.ocr_amount else '' }}">
+                                            </div>
+                                        </div>
+ 
+                                        <!-- Receipt Type (憑證類型) -->
+                                        <div style="width: 135px;">
+                                            <select class="form-select border-0 bg-white shadow-sm fw-medium px-2" name="receipt_type[]" data-ocr-value="{{ expense.ocr_receipt_type if expense and expense.ocr_receipt_type else '' }}" style="font-size: 0.9rem; border-radius: 8px;">
+                                                <option value="" disabled {{ 'selected' if not expense or not expense.receipt_type else '' }}>請選擇憑證類型...</option>
+                                                <option value="收據" {{ 'selected' if expense and expense.receipt_type == '收據' else '' }}>收據</option>
+                                                <option value="統一發票" {{ 'selected' if expense and expense.receipt_type == '統一發票' else '' }}>統一發票</option>
+                                            </select>
+                                        </div>
+ 
+                                        <!-- Tax ID (統一編號) -->
+                                        <div style="width: 120px;">
+                                            <input type="text" class="form-control border-0 bg-white shadow-sm text-muted small px-2 expense-tax-id" name="has_tax_id[]" value="{{ expense.tax_id_number if expense and expense.tax_id_number else '' }}" data-ocr-value="{{ expense.ocr_tax_id_number if expense and expense.ocr_tax_id_number else '' }}" placeholder="無" style="border-radius: 8px;">
+                                        </div>
+ 
+                                        <!-- Location (發生地點 -> 地點) -->
+                                        <div style="flex: 1.2 1 0px; min-width: 120px;">
+                                            <select class="form-select border-0 bg-white shadow-sm text-muted small px-2 expense-descr" name="expense_location[]" data-ocr-value="{{ expense.ocr_expense_location if expense and expense.ocr_expense_location else '' }}" style="font-size: 0.9rem; border-radius: 8px;">
+                                                <option value="" disabled {{ 'selected' if not expense or not expense.expense_location else '' }}>請選擇地點...</option>
+                                                {% for region in taiwan_regions %}
+                                                    <option value="{{ region }}" {{ 'selected' if expense and expense.expense_location == region else '' }}>{{ region }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+ 
+                                        <!-- Delete Button -->
+                                        <div style="width: 40px;" class="text-center">
+                                            <button type="button" class="btn btn-outline-danger border-0 p-1 del-row-btn" onclick="this.closest('.expense-row').remove(); calculateTotal();">
+                                                <i class="bi bi-trash3 fs-5"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+ 
+                                    <!-- Hidden Fields for OCR cache and file paths -->
+                                    <input type="hidden" class="ocr-date-hidden" name="ocr_date[]" value="{{ expense.ocr_date.isoformat() if expense and expense.ocr_date else '' }}">
+                                    <input type="hidden" class="ocr-category-hidden" name="ocr_category[]" value="{{ expense.ocr_category if expense and expense.ocr_category else '' }}">
+                                    <input type="hidden" class="ocr-item-hidden" name="ocr_expense_name[]" value="{{ expense.ocr_expense_name if expense and expense.ocr_expense_name else '' }}">
+                                    <input type="hidden" class="ocr-amount-hidden" name="ocr_amount[]" value="{{ expense.ocr_amount|int if expense and expense.ocr_amount else '0' }}">
+                                    <input type="hidden" class="ocr-receipt-type-hidden" name="ocr_receipt_type[]" value="{{ expense.ocr_receipt_type if expense and expense.ocr_receipt_type else '' }}">
+                                    <input type="hidden" class="ocr-tax-id-hidden" name="ocr_tax_id_number[]" value="{{ expense.ocr_tax_id_number if expense and expense.ocr_tax_id_number else '' }}">
+                                    <input type="hidden" class="ocr-expense-name-hidden" name="ocr_expense_location[]" value="{{ expense.ocr_expense_location if expense and expense.ocr_expense_location else '' }}">
+                                    <input type="hidden" class="receipt-user-uploaded-hidden" name="is_receipt_user_uploaded[]" value="{{ 'true' if expense and expense.is_receipt_user_uploaded else 'false' }}">
+                                    <input type="hidden" class="existing-receipt-path-hidden" name="existing_receipt_path[]" value="{{ expense.receipt_path if expense and expense.receipt_path else '' }}">
+
+                                    <!-- Validation Message & Note Field -->
+                                    <div class="validation-row d-none mt-3 border-top pt-2">
+                                        <div class="d-flex align-items-center gap-2 mb-2">
+                                            <i class="bi bi-exclamation-triangle-fill text-danger small"></i>
+                                            <span class="text-danger small fw-bold limit-warning">超過公司報銷限額</span>
+                                        </div>
+                                        <input type="text" class="form-control bg-white shadow-sm text-muted small expense-note" name="expense_note[]" value="{{ expense.expense_note if expense else '' }}" placeholder="請填寫超過限額的理由 (必填)..." style="border-radius: 8px;">
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-4 py-2" id="add-expense-btn" style="border-radius: 10px;">
+                            <i class="bi bi-plus-circle me-2"></i> 新增報銷項目
+                        </button>
+                    </div>
+
+                    <!-- Category Totals Summary (Horizontal Row) -->
+                    <div class="mt-5 border-top pt-4">
+                        <h5 class="fw-bold mb-3" style="color: var(--brand-primary);"><i class="bi bi-layout-split me-2"></i>原申請預算與報銷總價比較</h5>
+                        <div class="card border-0 bg-light rounded-4 shadow-sm mb-4">
+                            <div class="card-body py-4 px-4">
+                                <div class="row align-items-center text-center">
+                                    <div class="col-3">
+                                        <div class="small text-muted fw-bold mb-2"><i class="bi bi-house-door-fill me-1"></i>住宿費</div>
+                                        <div class="small text-muted mb-1">原申請預算: NT$ {{ "{:,.0f}".format(req.est_accommodation) }}</div>
+                                        <div class="fw-bold text-dark fs-5" id="total-accommodation">NT$ 0</div>
+                                    </div>
+                                    <div class="col-3 border-start border-2">
+                                        <div class="small text-muted fw-bold mb-2"><i class="bi bi-airplane-fill me-1"></i>交通費</div>
+                                        <div class="small text-muted mb-1">原申請預算: NT$ {{ "{:,.0f}".format(req.est_transportation) }}</div>
+                                        <div class="fw-bold text-dark fs-5" id="total-transportation">NT$ 0</div>
+                                    </div>
+                                    <div class="col-3 border-start border-2">
+                                        <div class="small text-muted fw-bold mb-2"><i class="bi bi-egg-fried me-1"></i>伙食費</div>
+                                        <div class="small text-muted mb-1">原申請預算: NT$ {{ "{:,.0f}".format(req.est_meals) }}</div>
+                                        <div class="fw-bold text-dark fs-5" id="total-meals">NT$ 0</div>
+                                    </div>
+                                    <div class="col-3 border-start border-2">
+                                        <div class="small text-muted fw-bold mb-2"><i class="bi bi-card-list me-1"></i>雜費</div>
+                                        <div class="small text-muted mb-1">原申請預算: NT$ {{ "{:,.0f}".format(req.est_misc) }}</div>
+                                        <div class="fw-bold text-dark fs-5" id="total-misc">NT$ 0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Final Grand Total -->
+                        <div class="d-flex justify-content-between align-items-center px-4 py-3 bg-white border border-2 border-primary rounded-4 shadow-sm">
+                            <h5 class="fw-bold mb-0 text-primary">報銷單總計金額</h5>
+                            <h4 class="fw-bold mb-0" style="color: var(--brand-secondary);" id="footerTotalDisplay">NT$ 0</h4>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 公司核銷規定 (列印時隱藏) -->
+            <div class="row mt-5 pt-4 border-top d-print-none">
+                <div class="col-12">
+                    <h5 class="fw-bold mb-3" style="color: var(--brand-primary);"><i class="bi bi-info-circle-fill me-2"></i>公司核銷規定</h5>
+                    <div class="alert alert-info py-3 shadow-sm mb-0" style="border-radius: 12px; border-left: 5px solid var(--brand-primary); background-color: #F0F9FF; border-color: #B9E6FE; color: var(--text-color);">
+                        <div class="row">
+                            {% for policy in policies %}
+                                <div class="col-md-3 col-sm-6 mb-2">
+                                    {% if policy.amount_limit < 99999 %}
+                                        <strong>{{ policy.category }}</strong> ({{ '平日' if policy.day_type == 'weekday' else '假日' if policy.day_type == 'weekend' else '不限' }}): <span class="text-primary fw-semibold">上限 {{ "{:,.0f}".format(policy.amount_limit) }}</span>
+                                    {% else %}
+                                        <strong>{{ policy.category }}</strong>: <span class="text-muted small">{{ policy.description }}</span>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-4 pt-4 border-top">
+                <div class="col-12 text-center d-flex gap-3 justify-content-center">
+                    <button type="button" onclick="location.href='{{ url_for('main.dashboard') }}'" class="btn btn-outline-secondary px-5 py-3 fw-bold" style="border-radius: 12px;">取消並返回</button>
+                    <button type="button" id="btn-submit-trigger" class="btn px-5 py-3 fw-bold text-white shadow" style="background-color: var(--brand-primary); border-radius: 12px;">
+                        <i class="bi bi-printer me-2"></i>列印並送出
+                    </button>
+                </div>
+            </div>
+            
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 自動收合左側主要導覽列
+        document.body.classList.add('sidebar-collapsed');
+
+        const container = document.getElementById('expense-container');
+        const addBtn = document.getElementById('add-expense-btn');
+
+        // 出差起迄日期與原申請預算
+        const travelStart = "{{ req.start_date }}";
+        const travelEnd = "{{ req.end_date }}";
+        const travelRequestId = {{ req.id }};
+        const approvedDestinations = "{{ req.destination }}".split(',').map(d => d.trim()).filter(d => d);
+        const budgetAccommodation = parseFloat("{{ req.est_accommodation }}") || 0;
+        const budgetTransportation = parseFloat("{{ req.est_transportation }}") || 0;
+        const budgetMeals = parseFloat("{{ req.est_meals }}") || 0;
+        const budgetMisc = parseFloat("{{ req.est_misc }}") || 0;
+
+        // 載入資料庫動態政策清單
+        const POLICIES = {{ policies_json | safe }};
+
+        // 儲存一個乾淨的模板供後續新增使用
+        const firstRow = container.querySelector('.expense-row');
+        const templateRow = firstRow.cloneNode(true);
+        // 清理模板中的值與自訂屬性
+        templateRow.querySelectorAll('input, select').forEach(input => {
+            if(input.type === 'number') input.value = '';
+            else if(input.type === 'file') input.value = '';
+            else if(input.type === 'hidden') {
+                if (input.classList.contains('ocr-amount-hidden')) input.value = '0';
+                else if (input.classList.contains('receipt-user-uploaded-hidden')) input.value = 'false';
+                else input.value = '';
+            }
+            else if(input.type === 'text') {
+                input.value = '';
+            }
+            if(input.tagName === 'SELECT') {
+                if (input.name === 'expense_category[]') {
+                    input.value = '';
+                } else if (input.name === 'receipt_type[]') {
+                    input.value = '';
+                } else if (input.name === 'expense_location[]') {
+                    input.value = ''; // 重置為 請選擇地點...
+                }
+            }
+            // 清除 OCR 快取值與框線樣式
+            input.removeAttribute('data-ocr-value');
+            input.removeAttribute('data-user-modified');
+            input.removeAttribute('data-need-confirm');
+            input.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+        });
+        templateRow.querySelector('.validation-row').classList.add('d-none');
+        const inputGroup = templateRow.querySelector('.input-group');
+        if (inputGroup) {
+            inputGroup.classList.remove('border', 'border-danger', 'rounded', 'border-violation', 'border-modified', 'border-need-fill');
+        }
+
+        const templatePreviewBtn = templateRow.querySelector('.btn-preview-receipt');
+        if (templatePreviewBtn) {
+            templatePreviewBtn.setAttribute('disabled', 'disabled');
+            templatePreviewBtn.removeAttribute('data-file-url');
+            templatePreviewBtn.removeAttribute('data-user-uploaded');
+            templatePreviewBtn.classList.remove('btn-outline-success');
+            templatePreviewBtn.classList.add('btn-outline-secondary');
+        }
+
+        const templateScanLabel = templateRow.querySelector('label[title="掃描單據"]');
+        if (templateScanLabel) {
+            templateScanLabel.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+        }
+
+
+        const DRAFT_KEY = 'expense_draft_req_' + "{{ req.id }}";
+
+        function saveDraft() {
+            // 避免在載入草稿的過程中觸發覆寫儲存
+            if (typeof isLoadingDraft !== 'undefined' && isLoadingDraft) return;
+
+            const rows = document.querySelectorAll('.expense-row');
+            const draftData = [];
+            
+            rows.forEach(row => {
+                const previewBtn = row.querySelector('.btn-preview-receipt');
+                const existingPathHidden = row.querySelector('.existing-receipt-path-hidden');
+                
+                const fileUrl = previewBtn ? (previewBtn.dataset.fileUrl || '') : '';
+                const userUploaded = previewBtn ? (previewBtn.dataset.userUploaded || 'false') : 'false';
+
+                draftData.push({
+                    fileUrl: fileUrl,
+                    userUploaded: userUploaded,
+                    
+                    expense_date: row.querySelector('input[name="expense_date[]"]').value,
+                    ocr_date: row.querySelector('.ocr-date-hidden').value,
+                    ocr_date_dataset: row.querySelector('input[name="expense_date[]"]').dataset.ocrValue || '',
+                    date_user_modified: row.querySelector('input[name="expense_date[]"]').dataset.userModified || '',
+                    date_need_confirm: row.querySelector('input[name="expense_date[]"]').dataset.needConfirm || '',
+                    
+                    expense_category: row.querySelector('select[name="expense_category[]"]').value,
+                    ocr_category: row.querySelector('.ocr-category-hidden').value,
+                    ocr_category_dataset: row.querySelector('select[name="expense_category[]"]').dataset.ocrValue || '',
+                    category_user_modified: row.querySelector('select[name="expense_category[]"]').dataset.userModified || '',
+                    category_need_confirm: row.querySelector('select[name="expense_category[]"]').dataset.needConfirm || '',
+                    
+                    expense_name: row.querySelector('input[name="expense_name[]"]').value,
+                    ocr_expense_name: row.querySelector('.ocr-item-hidden').value,
+                    ocr_expense_name_dataset: row.querySelector('input[name="expense_name[]"]').dataset.ocrValue || '',
+                    name_user_modified: row.querySelector('input[name="expense_name[]"]').dataset.userModified || '',
+                    name_need_confirm: row.querySelector('input[name="expense_name[]"]').dataset.needConfirm || '',
+                    
+                    requested_amount: row.querySelector('input[name="requested_amount[]"]').value,
+                    ocr_amount: row.querySelector('.ocr-amount-hidden').value,
+                    ocr_amount_dataset: row.querySelector('input[name="requested_amount[]"]').dataset.ocrValue || '',
+                    amount_user_modified: row.querySelector('input[name="requested_amount[]"]').dataset.userModified || '',
+                    amount_need_confirm: row.querySelector('input[name="requested_amount[]"]').dataset.needConfirm || '',
+                    
+                    receipt_type: row.querySelector('select[name="receipt_type[]"]').value,
+                    ocr_receipt_type: row.querySelector('.ocr-receipt-type-hidden').value,
+                    ocr_receipt_type_dataset: row.querySelector('select[name="receipt_type[]"]').dataset.ocrValue || '',
+                    receipt_type_user_modified: row.querySelector('select[name="receipt_type[]"]').dataset.userModified || '',
+                    receipt_type_need_confirm: row.querySelector('select[name="receipt_type[]"]').dataset.needConfirm || '',
+                    
+                    has_tax_id: row.querySelector('input[name="has_tax_id[]"]').value,
+                    ocr_tax_id_number: row.querySelector('.ocr-tax-id-hidden').value,
+                    ocr_tax_id_number_dataset: row.querySelector('input[name="has_tax_id[]"]').dataset.ocrValue || '',
+                    tax_id_user_modified: row.querySelector('input[name="has_tax_id[]"]').dataset.userModified || '',
+                    tax_id_need_confirm: row.querySelector('input[name="has_tax_id[]"]').dataset.needConfirm || '',
+                    
+                    expense_location: row.querySelector('select[name="expense_location[]"]').value,
+                    ocr_expense_location: row.querySelector('.ocr-expense-name-hidden').value,
+                    ocr_expense_location_dataset: row.querySelector('select[name="expense_location[]"]').dataset.ocrValue || '',
+                    location_user_modified: row.querySelector('select[name="expense_location[]"]').dataset.userModified || '',
+                    location_need_confirm: row.querySelector('select[name="expense_location[]"]').dataset.needConfirm || '',
+                    
+                    is_receipt_user_uploaded: row.querySelector('.receipt-user-uploaded-hidden').value,
+                    existing_receipt_path: existingPathHidden ? existingPathHidden.value : '',
+                    expense_note: row.querySelector('.expense-note').value
+                });
+            });
+            
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+        }
+
+        function loadDraft() {
+            const raw = localStorage.getItem(DRAFT_KEY);
+            if (!raw) return false;
+            
+            let draftData;
+            try {
+                draftData = JSON.parse(raw);
+            } catch(e) {
+                return false;
+            }
+            
+            if (!draftData || draftData.length === 0) return false;
+            
+            isLoadingDraft = true;
+            
+            // 清空目前的 row
+            container.innerHTML = '';
+            
+            draftData.forEach(data => {
+                const row = templateRow.cloneNode(true);
+                
+                // 恢復憑證眼睛按鈕
+                const previewBtn = row.querySelector('.btn-preview-receipt');
+                if (data.fileUrl) {
+                    previewBtn.dataset.fileUrl = data.fileUrl;
+                    previewBtn.dataset.userUploaded = data.userUploaded;
+                    previewBtn.removeAttribute('disabled');
+                    previewBtn.classList.remove('btn-outline-secondary');
+                    previewBtn.classList.add('btn-outline-success');
+                }
+                
+                // 填入所有值與 dataset
+                const dateInput = row.querySelector('input[name="expense_date[]"]');
+                dateInput.value = data.expense_date;
+                if(data.ocr_date_dataset) dateInput.dataset.ocrValue = data.ocr_date_dataset;
+                if(data.date_user_modified) dateInput.dataset.userModified = data.date_user_modified;
+                if(data.date_need_confirm) dateInput.dataset.needConfirm = data.date_need_confirm;
+                row.querySelector('.ocr-date-hidden').value = data.ocr_date;
+                
+                const catSelect = row.querySelector('select[name="expense_category[]"]');
+                catSelect.value = data.expense_category;
+                if(data.ocr_category_dataset) catSelect.dataset.ocrValue = data.ocr_category_dataset;
+                if(data.category_user_modified) catSelect.dataset.userModified = data.category_user_modified;
+                if(data.category_need_confirm) catSelect.dataset.needConfirm = data.category_need_confirm;
+                row.querySelector('.ocr-category-hidden').value = data.ocr_category;
+                
+                const nameInput = row.querySelector('input[name="expense_name[]"]');
+                nameInput.value = data.expense_name;
+                if(data.ocr_expense_name_dataset) nameInput.dataset.ocrValue = data.ocr_expense_name_dataset;
+                if(data.name_user_modified) nameInput.dataset.userModified = data.name_user_modified;
+                if(data.name_need_confirm) nameInput.dataset.needConfirm = data.name_need_confirm;
+                row.querySelector('.ocr-item-hidden').value = data.ocr_expense_name;
+                
+                const amtInput = row.querySelector('input[name="requested_amount[]"]');
+                amtInput.value = data.requested_amount;
+                if(data.ocr_amount_dataset) amtInput.dataset.ocrValue = data.ocr_amount_dataset;
+                if(data.amount_user_modified) amtInput.dataset.userModified = data.amount_user_modified;
+                if(data.amount_need_confirm) amtInput.dataset.needConfirm = data.amount_need_confirm;
+                row.querySelector('.ocr-amount-hidden').value = data.ocr_amount;
+                
+                const receiptSelect = row.querySelector('select[name="receipt_type[]"]');
+                receiptSelect.value = data.receipt_type;
+                if(data.ocr_receipt_type_dataset) receiptSelect.dataset.ocrValue = data.ocr_receipt_type_dataset;
+                if(data.receipt_type_user_modified) receiptSelect.dataset.userModified = data.receipt_type_user_modified;
+                if(data.receipt_type_need_confirm) receiptSelect.dataset.needConfirm = data.receipt_type_need_confirm;
+                row.querySelector('.ocr-receipt-type-hidden').value = data.ocr_receipt_type;
+                
+                const taxInput = row.querySelector('input[name="has_tax_id[]"]');
+                taxInput.value = data.has_tax_id;
+                if(data.ocr_tax_id_number_dataset) taxInput.dataset.ocrValue = data.ocr_tax_id_number_dataset;
+                if(data.tax_id_user_modified) taxInput.dataset.userModified = data.tax_id_user_modified;
+                if(data.tax_id_need_confirm) taxInput.dataset.needConfirm = data.tax_id_need_confirm;
+                row.querySelector('.ocr-tax-id-hidden').value = data.ocr_tax_id_number;
+                
+                const locSelect = row.querySelector('select[name="expense_location[]"]');
+                locSelect.value = data.expense_location;
+                if(data.ocr_expense_location_dataset) locSelect.dataset.ocrValue = data.ocr_expense_location_dataset;
+                if(data.location_user_modified) locSelect.dataset.userModified = data.location_user_modified;
+                if(data.location_need_confirm) locSelect.dataset.needConfirm = data.location_need_confirm;
+                row.querySelector('.ocr-expense-name-hidden').value = data.ocr_expense_location;
+                
+                row.querySelector('.receipt-user-uploaded-hidden').value = data.is_receipt_user_uploaded;
+                const existingPathHidden = row.querySelector('.existing-receipt-path-hidden');
+                if(existingPathHidden) existingPathHidden.value = data.existing_receipt_path;
+                
+                const noteInput = row.querySelector('.expense-note');
+                if(noteInput) noteInput.value = data.expense_note;
+                
+                container.appendChild(row);
+            });
+            
+            // 重新執行全行驗證與合計
+            document.querySelectorAll('.expense-row').forEach(runAllRowValidations);
+            calculateTotal();
+            
+            isLoadingDraft = false;
+            return true;
+        }
+
+        function isWeekend(dateStr) {
+            if (!dateStr) return false;
+            const date = new Date(dateStr);
+            const day = date.getDay();
+            return day === 0 || day === 6; // 0=Sun, 6=Sat
+        }
+
+        // 1. 公司政策限額與出差預算檢查 (合併驗證紅框與理由欄位)
+        function checkAmountLimitAndBudget(row) {
+            const categorySelect = row.querySelector('.expense-category');
+            if (!categorySelect) return;
+            const category = categorySelect.value;
+            const amountInput = row.querySelector('.expense-amount');
+            if (!amountInput) return;
+            const amount = parseFloat(amountInput.value) || 0;
+            const date = row.querySelector('input[type="date"]').value;
+            const descr = row.querySelector('.expense-descr').value;
+            const validationRow = row.querySelector('.validation-row');
+            const warningText = row.querySelector('.limit-warning');
+            const noteInput = row.querySelector('.expense-note');
+            const amountInputGroup = row.querySelector('.input-group') || amountInput;
+
+            const itemInput = row.querySelector('input[name="expense_name[]"]');
+            const itemVal = itemInput ? itemInput.value.toLowerCase() : "";
+
+            // 1.1 公司政策限額檢查
+            let matchedPolicies = [];
+            if (category === '交通費') {
+                if (itemVal.includes('計程車') || itemVal.includes('taxi') || descr.includes('計程車') || descr.includes('taxi')) {
+                    matchedPolicies = POLICIES.filter(p => p.category === '計程車');
+                } else {
+                    matchedPolicies = POLICIES.filter(p => p.category === '交通費');
+                }
+            } else if (category === '伙食費') {
+                if (itemVal.includes('早餐') || itemVal.includes('breakfast')) {
+                    matchedPolicies = POLICIES.filter(p => p.category === '伙食費 (早餐)');
+                } else if (itemVal.includes('午餐') || itemVal.includes('lunch') || itemVal.includes('便當') || itemVal.includes('飯')) {
+                    matchedPolicies = POLICIES.filter(p => p.category === '伙食費 (午餐)');
+                } else if (itemVal.includes('晚餐') || itemVal.includes('dinner')) {
+                    matchedPolicies = POLICIES.filter(p => p.category === '伙食費 (晚餐)');
+                } else {
+                    matchedPolicies = POLICIES.filter(p => p.category === '伙食費 (午餐)');
+                }
+            } else {
+                matchedPolicies = POLICIES.filter(p => p.category === category);
+            }
+
+            let limit = Infinity;
+            let limitType = "無金額限制";
+
+            if (date) {
+                const weekend = isWeekend(date);
+                for (const p of matchedPolicies) {
+                    if (p.start_date && date < p.start_date) continue;
+                    if (p.end_date && date > p.end_date) continue;
+                    
+                    if (p.day_type === 'weekday' && !weekend) {
+                        limit = p.amount_limit;
+                        limitType = `平日上限 $${limit.toLocaleString()}`;
+                        break;
+                    } else if (p.day_type === 'weekend' && weekend) {
+                        limit = p.amount_limit;
+                        limitType = `假日上限 $${limit.toLocaleString()}`;
+                        break;
+                    } else if (p.day_type === 'any') {
+                        limit = p.amount_limit;
+                        limitType = `上限 $${limit.toLocaleString()}`;
+                        break;
+                    }
+                }
+            }
+
+            const isOverCompanyLimit = amount > limit;
+
+            // 1.2 出差預算檢查
+            let categoryBudget = 0;
+            if (category === '住宿費') {
+                categoryBudget = budgetAccommodation;
+            } else if (category === '交通費') {
+                categoryBudget = budgetTransportation;
+            } else if (category.includes('伙食費')) {
+                categoryBudget = budgetMeals;
+            } else if (category === '雜費') {
+                categoryBudget = budgetMisc;
+            }
+
+            const isOverBudget = amount > categoryBudget;
+
+            // 1.3 統一套用紅框與理由必填檢驗
+            if (isOverCompanyLimit || isOverBudget) {
+                validationRow.classList.remove('d-none');
+                amountInputGroup.classList.add('border-violation');
+                noteInput.setAttribute('required', 'required');
+
+                if (isOverCompanyLimit) {
+                    warningText.innerText = `已超過${limitType}，請填寫說明`;
+                } else {
+                    warningText.innerText = `已超過該類別出差預算上限 $${categoryBudget.toLocaleString()}，請填寫說明`;
+                }
+
+                // 金額超過需要填寫理由說明：若理由為空則顯示紅框，若已填寫則顯示藍框
+                const noteVal = noteInput.value.trim();
+                if (noteVal === '') {
+                    noteInput.classList.add('border-violation');
+                    noteInput.classList.remove('border-modified', 'border-need-fill');
+                } else {
+                    noteInput.classList.remove('border-violation', 'border-need-fill');
+                    noteInput.classList.add('border-modified');
+                }
+            } else {
+                validationRow.classList.add('d-none');
+                amountInputGroup.classList.remove('border-violation');
+                noteInput.removeAttribute('required');
+                noteInput.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+            }
+        }
+
+        // 2. 費用日期與地點比對驗證 (紅色框框)
+        function validateTravelRequestLimits(row) {
+            // 2.1 日期範圍檢查 (是否在出差區間內，若有錯顯示紅框)
+            const dateInput = row.querySelector('input[name="expense_date[]"]');
+            if (dateInput) {
+                const dateVal = dateInput.value;
+                if (!dateVal || dateVal < travelStart || dateVal > travelEnd) {
+                    dateInput.classList.add('border-violation');
+                } else {
+                    dateInput.classList.remove('border-violation');
+                }
+            }
+
+            // 2.2 地點符合性檢查 (是否在核准的出差目的地內，若有錯顯示紅框)
+            const locationSelect = row.querySelector('select[name="expense_location[]"]');
+            if (locationSelect) {
+                const locationVal = locationSelect.value;
+                if (locationVal && !approvedDestinations.includes(locationVal)) {
+                    locationSelect.classList.add('border-violation');
+                } else {
+                    locationSelect.classList.remove('border-violation');
+                }
+            }
+
+            // 2.3 統一編號符合性檢查 (必須是公司統編 58711014)
+            const taxIdInput = row.querySelector('.expense-tax-id');
+            if (taxIdInput) {
+                const taxIdVal = taxIdInput.value.trim().toLowerCase();
+                if (taxIdVal && taxIdVal !== 'no' && taxIdVal !== '無' && taxIdVal !== 'false') {
+                    const digits = taxIdVal.replace(/\D/g, '');
+                    if (digits !== '58711014') {
+                        taxIdInput.classList.add('border-violation');
+                    } else {
+                        taxIdInput.classList.remove('border-violation');
+                    }
+                } else {
+                    taxIdInput.classList.remove('border-violation');
+                }
+            }
+        }
+
+        // 3. OCR 一致性與手動修改檢查 (藍色框框)
+        function checkUserOverrides(row) {
+            const fields = [
+                { el: row.querySelector('input[name="expense_date[]"]'), isNum: false },
+                { el: row.querySelector('select[name="expense_category[]"]'), isNum: false },
+                { el: row.querySelector('input[name="expense_name[]"]'), isNum: false },
+                { el: row.querySelector('input[name="requested_amount[]"]'), isNum: true },
+                { el: row.querySelector('select[name="receipt_type[]"]'), isNum: false },
+                { el: row.querySelector('input[name="has_tax_id[]"]'), isNum: false },
+                { el: row.querySelector('[name="expense_location[]"]'), isNum: false }
+            ];
+
+            fields.forEach(({ el, isNum }) => {
+                if (!el) return;
+                
+                let isModified = el.dataset.userModified === "true";
+                let needConfirm = el.dataset.needConfirm === "true";
+
+                // 比對 OCR 原始值 (如果存在)
+                if (el.dataset.ocrValue !== undefined) {
+                    const currentVal = el.value.trim();
+                    const ocrVal = el.dataset.ocrValue.trim();
+                    let ocrDiff = false;
+                    if (isNum) {
+                        ocrDiff = (parseFloat(currentVal) !== parseFloat(ocrVal));
+                    } else {
+                        ocrDiff = (currentVal !== ocrVal);
+                    }
+                    if (ocrDiff) {
+                        el.dataset.userModified = "true";
+                        el.dataset.needConfirm = "false";
+                        isModified = true;
+                        needConfirm = false;
+                    }
+                }
+
+                // 強制規則：若欄位目前為空，則絕不顯示藍色框框 (避免清除內容後仍顯示藍框)
+                const val = el.value.trim();
+                const isEmpty = isNum ? (parseFloat(val) <= 0 || val === "") : (val === "");
+                if (isEmpty) {
+                    isModified = false;
+                    needConfirm = false;
+                }
+
+                // 決定套用框線的 DOM 節點 (金額為 Input Group，其他為輸入框本身)
+                let targetElement = el;
+                if (el.classList.contains('expense-amount')) {
+                    targetElement = row.querySelector('.input-group') || el;
+                }
+
+                // 優先權判斷：若已有紅色框框 (.border-violation)，則排除藍色框框
+                if (targetElement.classList.contains('border-violation')) {
+                    targetElement.classList.remove('border-modified', 'border-need-fill');
+                } else {
+                    if (isModified) {
+                        targetElement.classList.add('border-modified');
+                        targetElement.classList.remove('border-need-fill');
+                    } else if (needConfirm) {
+                        targetElement.classList.add('border-need-fill');
+                        targetElement.classList.remove('border-modified');
+                    } else {
+                        targetElement.classList.remove('border-modified', 'border-need-fill');
+                    }
+                }
+            });
+
+            // 憑證（掃描單據）手動上傳後之藍色框框標示
+            const previewBtn = row.querySelector('.btn-preview-receipt');
+            const scanLabel = row.querySelector('label[title="掃描單據"]');
+            if (scanLabel && previewBtn) {
+                const hasFile = !!previewBtn.dataset.fileUrl;
+                const isUploaded = previewBtn.dataset.userUploaded === "true";
+                let labelModified = isUploaded && hasFile;
+
+                if (scanLabel.classList.contains('border-violation')) {
+                    scanLabel.classList.remove('border-modified', 'border-need-fill');
+                } else {
+                    if (labelModified) {
+                        scanLabel.classList.add('border-modified');
+                        scanLabel.classList.remove('border-need-fill');
+                    } else {
+                        scanLabel.classList.remove('border-modified');
+                    }
+                }
+            }
+        }
+
+        // 4. 空值智慧檢查與藍色引導框提示 (如果任何一個框沒有資料要顯示藍框)
+        function checkEmptyBorders(row) {
+            const checkFields = [
+                { el: row.querySelector('input[name="expense_date[]"]'), isAmt: false },
+                { el: row.querySelector('select[name="expense_category[]"]'), isAmt: false },
+                { el: row.querySelector('input[name="expense_name[]"]'), isAmt: false },
+                { el: row.querySelector('.expense-amount'), isAmt: true },
+                { el: row.querySelector('select[name="receipt_type[]"]'), isAmt: false },
+                { el: row.querySelector('.expense-tax-id'), isAmt: false },
+                { el: row.querySelector('select[name="expense_location[]"]'), isAmt: false }
+            ];
+
+            // 1. 憑證檔案（掃描單據）檢查
+            const previewBtn = row.querySelector('.btn-preview-receipt');
+            const scanLabel = row.querySelector('label[title="掃描單據"]');
+            if (scanLabel && previewBtn) {
+                const isEmptyFile = !previewBtn.dataset.fileUrl;
+                if (isEmptyFile) {
+                    if (!scanLabel.classList.contains('border-violation')) {
+                        scanLabel.classList.add('border-need-fill');
+                        scanLabel.classList.remove('border-modified');
+                    } else {
+                        scanLabel.classList.remove('border-need-fill');
+                    }
+                } else {
+                    scanLabel.classList.remove('border-need-fill');
+                }
+            }
+
+            // 2. 其他 7 大輸入欄位空值檢查
+            checkFields.forEach(({ el, isAmt }) => {
+                if (!el) return;
+                const val = el.value.trim();
+                const isEmpty = isAmt ? (parseFloat(val) <= 0 || val === "") : (val === "");
+
+                let target = el;
+                if (el.classList.contains('expense-amount')) {
+                    target = row.querySelector('.input-group') || el;
+                }
+
+                if (isEmpty) {
+                    if (!target.classList.contains('border-violation')) {
+                        target.classList.add('border-need-fill');
+                        target.classList.remove('border-modified');
+                    } else {
+                        target.classList.remove('border-need-fill');
+                    }
+                } else {
+                    // 只有在不是需要手動確認（needConfirm === "true"）時，才移除 border-need-fill
+                    // 且如果已有紅框，也必移除藍框
+                    if (target.classList.contains('border-violation') || el.dataset.needConfirm !== "true") {
+                        target.classList.remove('border-need-fill');
+                    }
+                }
+            });
+        }
+
+        // 統一呼叫的所有驗證邏輯
+        function runAllRowValidations(row) {
+            // 如果該行尚未上傳任何憑證，代表尚未開始編輯或屬於初始乾淨行，清除並排除所有邊框顏色，不進行即時驗證！
+            const previewBtn = row.querySelector('.btn-preview-receipt');
+            if (!previewBtn || !previewBtn.dataset.fileUrl) {
+                const checkFields = [
+                    row.querySelector('input[name="expense_date[]"]'),
+                    row.querySelector('select[name="expense_category[]"]'),
+                    row.querySelector('input[name="expense_name[]"]'),
+                    row.querySelector('.expense-amount'),
+                    row.querySelector('select[name="receipt_type[]"]'),
+                    row.querySelector('.expense-tax-id'),
+                    row.querySelector('select[name="expense_location[]"]')
+                ];
+                checkFields.forEach(el => {
+                    if (!el) return;
+                    let target = el;
+                    if (el.classList.contains('expense-amount')) {
+                        target = row.querySelector('.input-group') || el;
+                    }
+                    target.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+                });
+                const scanLabel = row.querySelector('label[title="掃描單據"]');
+                if (scanLabel) scanLabel.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+                
+                // 重置理由欄位樣式
+                const noteInput = row.querySelector('.expense-note');
+                if (noteInput) {
+                    noteInput.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+                }
+                return; // 直接返回，不進行後續邊框套用驗證
+            }
+
+            checkAmountLimitAndBudget(row);
+            validateTravelRequestLimits(row);
+            checkUserOverrides(row);
+            checkEmptyBorders(row);
+        }
+
+        // 計算總金額與類別合計
+        function calculateTotal() {
+            let total = 0;
+            let catTotals = {
+                '住宿費': 0,
+                '交通費': 0,
+                '伙食費': 0,
+                '雜費': 0
+            };
+
+            const rows = document.querySelectorAll('.expense-row');
+            rows.forEach(row => {
+                const catElement = row.querySelector('.expense-category');
+                if (!catElement) return;
+                const cat = catElement.value;
+                const amountInput = row.querySelector('.expense-amount');
+                if (!amountInput) return;
+                const amount = parseFloat(amountInput.value) || 0;
+                total += amount;
+
+                if (cat === '住宿費') catTotals['住宿費'] += amount;
+                else if (cat === '交通費') catTotals['交通費'] += amount;
+                else if (cat.includes('伙食費')) catTotals['伙食費'] += amount;
+                else if (cat === '雜費') catTotals['雜費'] += amount;
+            });
+
+            if (document.getElementById('footerTotalDisplay')) {
+                document.getElementById('footerTotalDisplay').innerText = 'NT$ ' + total.toLocaleString();
+            }
+            
+            const totalAccEl = document.getElementById('total-accommodation');
+            const totalTransEl = document.getElementById('total-transportation');
+            const totalMealsEl = document.getElementById('total-meals');
+            const totalMiscEl = document.getElementById('total-misc');
+            
+            if (totalAccEl) {
+                totalAccEl.innerText = 'NT$ ' + catTotals['住宿費'].toLocaleString();
+                if (catTotals['住宿費'] > budgetAccommodation) {
+                    totalAccEl.classList.remove('text-dark', 'text-success');
+                    totalAccEl.classList.add('text-danger');
+                } else {
+                    totalAccEl.classList.remove('text-danger', 'text-dark');
+                    totalAccEl.classList.add('text-success');
+                }
+            }
+            if (totalTransEl) {
+                totalTransEl.innerText = 'NT$ ' + catTotals['交通費'].toLocaleString();
+                if (catTotals['交通費'] > budgetTransportation) {
+                    totalTransEl.classList.remove('text-dark', 'text-success');
+                    totalTransEl.classList.add('text-danger');
+                } else {
+                    totalTransEl.classList.remove('text-danger', 'text-dark');
+                    totalTransEl.classList.add('text-success');
+                }
+            }
+            if (totalMealsEl) {
+                totalMealsEl.innerText = 'NT$ ' + catTotals['伙食費'].toLocaleString();
+                if (catTotals['伙食費'] > budgetMeals) {
+                    totalMealsEl.classList.remove('text-dark', 'text-success');
+                    totalMealsEl.classList.add('text-danger');
+                } else {
+                    totalMealsEl.classList.remove('text-danger', 'text-dark');
+                    totalMealsEl.classList.add('text-success');
+                }
+            }
+            if (totalMiscEl) {
+                totalMiscEl.innerText = 'NT$ ' + catTotals['雜費'].toLocaleString();
+                if (catTotals['雜費'] > budgetMisc) {
+                    totalMiscEl.classList.remove('text-dark', 'text-success');
+                    totalMiscEl.classList.add('text-danger');
+                } else {
+                    totalMiscEl.classList.remove('text-danger', 'text-dark');
+                    totalMiscEl.classList.add('text-success');
+                }
+            }
+            
+            // 自動儲存草稿
+            if (typeof saveDraft === 'function') {
+                saveDraft();
+            }
+        }
+
+        // 恢復/重置明細行為全新空白行
+        function resetRow(row) {
+            row.querySelectorAll('input, select').forEach(input => {
+                if(input.type === 'number') input.value = '';
+                else if(input.type === 'file') input.value = '';
+                else if(input.type === 'hidden') {
+                    if (input.classList.contains('ocr-amount-hidden')) input.value = '0';
+                    else if (input.classList.contains('receipt-user-uploaded-hidden')) input.value = 'false';
+                    else input.value = '';
+                }
+                else if(input.type === 'text') {
+                    input.value = '';
+                }
+                if(input.tagName === 'SELECT') {
+                    input.value = '';
+                }
+                input.removeAttribute('data-ocr-value');
+                input.removeAttribute('data-user-modified');
+                input.removeAttribute('data-need-confirm');
+                input.classList.remove('border-violation', 'border-modified', 'border-need-fill');
+            });
+            const previewBtn = row.querySelector('.btn-preview-receipt');
+            if (previewBtn) {
+                previewBtn.setAttribute('disabled', 'disabled');
+                previewBtn.removeAttribute('data-file-url');
+                previewBtn.removeAttribute('data-user-uploaded');
+                previewBtn.classList.remove('btn-outline-success');
+                previewBtn.classList.add('btn-outline-secondary');
+            }
+            const receiptUserUploadedInput = row.querySelector('.receipt-user-uploaded-hidden');
+            if (receiptUserUploadedInput) receiptUserUploadedInput.value = 'false';
+
+            calculateTotal();
+            runAllRowValidations(row);
+        }
+
+        // 顯示重複申報或重複報銷警示視窗
+        function showDuplicateModal(amount, date, type) {
+            document.getElementById('dupModalAmount').innerText = amount ? 'NT$ ' + parseFloat(amount).toLocaleString() : 'NT$ 0';
+            document.getElementById('dupModalDate').innerText = date || '-';
+            
+            const titleIcon = document.getElementById('dupModalTitleIcon');
+            const titleText = document.getElementById('dupModalTitleText');
+            const centerIcon = document.getElementById('dupModalCenterIcon');
+            const header = document.getElementById('dupModalHeader');
+            const body1 = document.getElementById('dupModalBody1');
+            const body2 = document.getElementById('dupModalBody2');
+            const btn = document.getElementById('dupModalBtn');
+            const headerBar = document.getElementById('dupModalHeaderBar');
+
+            if (type === 'local') {
+                headerBar.style.setProperty('background-color', '#FEF3C7', 'important'); // warning yellow
+                titleIcon.className = 'bi bi-exclamation-octagon-fill fs-4 text-warning';
+                titleText.innerText = '重複申報警示';
+                titleText.style.color = '#D97706';
+                centerIcon.className = 'bi bi-file-earmark-diff text-warning';
+                centerIcon.style.color = '#D97706';
+                header.innerText = '系統檢測到明細內疑似重複的項目！';
+                body1.innerHTML = `您輸入或辨識的項目（金額：<span class="fw-bold text-danger">NT$ ${parseFloat(amount).toLocaleString()}</span>，日期：<span class="fw-bold text-dark">${date}</span>），其<b>金額與日期</b>與目前表單明細中已存在的其他項目完全一致。`;
+                body2.innerText = '請確認此單據是否已在本報銷單中申報過，以避免重複申報。此重複項目一律不予報銷。';
+                btn.innerText = '我理解了，重新填寫';
+                btn.className = 'btn btn-warning px-4 py-2 w-100 fw-bold text-white';
+                btn.style.backgroundColor = '#D97706';
+            } else if (type === 'database') {
+                headerBar.style.setProperty('background-color', '#FEE2E2', 'important'); // error red
+                titleIcon.className = 'bi bi-exclamation-octagon-fill fs-4 text-danger';
+                titleText.innerText = '重複報銷限制（一律不能報銷）';
+                titleText.style.color = '#DC2626';
+                centerIcon.className = 'bi bi-x-octagon-fill text-danger';
+                centerIcon.style.color = '#DC2626';
+                header.innerText = '系統檢測到該單據已在系統中報銷過！';
+                body1.innerHTML = `您輸入或辨識的項目（金額：<span class="fw-bold text-danger">NT$ ${parseFloat(amount).toLocaleString()}</span>，日期：<span class="fw-bold text-dark">${date}</span>），<b>已存在於系統資料庫中</b>。`;
+                body2.innerHTML = '根據公司財務合規政策，<b>同張單據一律不能重複報銷</b>。本項目已被系統自動拒絕並清空，請更換正確的單據。';
+                btn.innerText = '我知道了';
+                btn.className = 'btn btn-danger px-4 py-2 w-100 fw-bold text-white';
+                btn.style.backgroundColor = '#DC2626';
+            }
+
+            const dupModal = new bootstrap.Modal(document.getElementById('duplicateReceiptModal'));
+            dupModal.show();
+        }
+
+        // 正常非重複時的自動填寫與驗證
+        function fillOcrData(row, data, recognizedDate, recognizedAmount) {
+            const dateInput = row.querySelector('input[name="expense_date[]"]');
+            if (recognizedDate && dateInput) {
+                dateInput.value = recognizedDate;
+            }
+            
+            const catSelect = row.querySelector('select[name="expense_category[]"]');
+            if (data.category && catSelect) {
+                catSelect.value = data.category;
+            }
+            
+            const itemInput = row.querySelector('input[name="expense_name[]"]');
+            if (data.vendor && data.vendor !== '無' && itemInput) {
+                itemInput.value = data.vendor;
+            } else if (data.raw_text && data.raw_text.length > 0 && itemInput) {
+                itemInput.value = data.raw_text[0].substring(0, 15);
+            }
+            
+            const amountInput = row.querySelector('input[name="requested_amount[]"]');
+            if (data.amount && amountInput) {
+                amountInput.value = data.amount;
+            }
+            
+            const receiptSelect = row.querySelector('select[name="receipt_type[]"]');
+            if (receiptSelect) {
+                if (data.invoice_type === 'electronic') {
+                    receiptSelect.value = '統一發票';
+                } else if (data.invoice_type === 'handwritten') {
+                    receiptSelect.value = '收據';
+                } else {
+                    receiptSelect.value = data.invoice_number ? '統一發票' : '收據';
+                }
+            }
+            
+            const taxIdInput = row.querySelector('input[name="has_tax_id[]"]');
+            if (taxIdInput) {
+                taxIdInput.value = (data.seller_tax_id && data.seller_tax_id !== '無' && data.seller_tax_id.trim() !== '') ? data.seller_tax_id : '';
+            }
+
+            // 寫入 dataset.ocrValue 以及隱藏的 hidden input 欄位以利提交至資料庫
+            if (dateInput) {
+                dateInput.dataset.ocrValue = dateInput.value;
+                const hid = row.querySelector('.ocr-date-hidden');
+                if (hid) hid.value = dateInput.value;
+            }
+            if (catSelect) {
+                catSelect.dataset.ocrValue = catSelect.value;
+                const hid = row.querySelector('.ocr-category-hidden');
+                if (hid) hid.value = catSelect.value;
+            }
+            if (itemInput) {
+                itemInput.dataset.ocrValue = itemInput.value;
+                const hid = row.querySelector('.ocr-item-hidden');
+                if (hid) hid.value = itemInput.value;
+            }
+            if (amountInput) {
+                amountInput.dataset.ocrValue = amountInput.value;
+                const hid = row.querySelector('.ocr-amount-hidden');
+                if (hid) hid.value = amountInput.value;
+            }
+            if (receiptSelect) {
+                receiptSelect.dataset.ocrValue = receiptSelect.value;
+                const hid = row.querySelector('.ocr-receipt-type-hidden');
+                if (hid) hid.value = receiptSelect.value;
+            }
+            if (taxIdInput) {
+                taxIdInput.dataset.ocrValue = taxIdInput.value;
+                const hid = row.querySelector('.ocr-tax-id-hidden');
+                if (hid) hid.value = taxIdInput.value;
+            }
+            
+            const locationInput = row.querySelector('[name="expense_location[]"]');
+            if (locationInput) {
+                locationInput.dataset.ocrValue = locationInput.value;
+                const hid = row.querySelector('.ocr-expense-name-hidden');
+                if (hid) hid.value = locationInput.value;
+            }
+            
+            // 標示需要手動確認與填寫
+            if (catSelect) catSelect.dataset.needConfirm = "true";
+            if (itemInput) itemInput.dataset.needConfirm = "true";
+            if (locationInput) locationInput.dataset.needConfirm = "true";
+
+            // 自動連動計算與驗證
+            calculateTotal();
+            runAllRowValidations(row);
+
+            // --- 彈出 AI OCR 辨識結果與提醒視窗 ---
+            document.getElementById('modalOcrDate').innerText = dateInput ? dateInput.value : '-';
+            document.getElementById('modalOcrItem').innerText = itemInput ? itemInput.value : '-';
+            document.getElementById('modalOcrAmount').innerText = (amountInput && amountInput.value && !isNaN(parseFloat(amountInput.value))) ? 'NT$ ' + parseFloat(amountInput.value).toLocaleString() : 'NT$ 0';
+            document.getElementById('modalOcrReceiptType').innerText = receiptSelect ? receiptSelect.value : '-';
+            document.getElementById('modalOcrTaxId').innerText = (taxIdInput && taxIdInput.value) ? taxIdInput.value : '無';
+
+            // 動態組裝「手動確認提醒」清單 (費用類別、費用名稱、地點必會提醒，其餘缺件動態提醒)
+            let confirmItems = [
+                `<li class="mb-1"><b>費用類別</b>（請點選並確認為：交通、住宿、伙食、或雜費）</li>`,
+                `<li class="mb-1"><b>費用名稱</b>（請確認品名與商家是否正確無缺漏）</li>`,
+                `<li class="mb-1"><b>地點</b>（請手動填寫費用發生的地點，例如：台北市、新北市）</li>`
+            ];
+
+            // 1. 檢查統一編號是否缺失
+            if (!taxIdInput || !taxIdInput.value.trim()) {
+                confirmItems.push(`<li class="mb-1"><b>統一編號</b>（此單據未自動辨識出統編，若需要申報公司統編請手動填寫）</li>`);
+            }
+
+            // 2. 檢查日期是否缺失或有警報
+            if (data.date_warning) {
+                confirmItems.push(`<li class="mb-1"><b>日期</b>（${data.date_warning}）</li>`);
+            }
+
+            // 3. 檢查金額是否缺失
+            if (!amountInput || !amountInput.value.trim() || parseFloat(amountInput.value) <= 0) {
+                confirmItems.push(`<li class="mb-1"><b>金額</b>（未自動辨識出有效金額，請手動確認填寫）</li>`);
+            }
+
+            // 4. 檢查憑證類型是否缺失
+            if (!receiptSelect || !receiptSelect.value.trim()) {
+                confirmItems.push(`<li class="mb-1"><b>憑證類型</b>（未自動辨識出憑證類型，請手動選取統一發票或收據）</li>`);
+            }
+
+            const confirmListContainer = document.getElementById('modalOcrConfirmList');
+            if (confirmListContainer) {
+                confirmListContainer.innerHTML = confirmItems.join("");
+            }
+
+            // 檢查異常與錯誤
+            let warnings = [];
+            
+            // 1. 檢查日期是否在出差區內
+            if (dateInput && dateInput.value) {
+                const dateVal = dateInput.value;
+                if (dateVal < travelStart || dateVal > travelEnd) {
+                    warnings.push(`單據日期 (<b>${dateVal}</b>) 不在本次出差期間 (<b>${travelStart} 至 ${travelEnd}</b>) 內！`);
+                }
+            }
+
+            // 2. 檢查統一編號是否與公司統編 58711014 一致
+            if (taxIdInput && taxIdInput.value) {
+                const taxIdVal = taxIdInput.value.trim().toLowerCase();
+                if (taxIdVal && taxIdVal !== 'no' && taxIdVal !== '無' && taxIdVal !== 'false') {
+                    const digits = taxIdVal.replace(/\D/g, '');
+                    if (digits !== '58711014') {
+                        warnings.push(`偵測到統一編號 (<b>${taxIdVal}</b>) 與公司統編 (<b>58711014</b>) 不符！`);
+                    }
+                }
+            }
+
+            // 渲染警告區
+            const warningsContainer = document.getElementById('modalOcrWarnings');
+            const warningsList = document.getElementById('modalWarningsList');
+            
+            if (warnings.length > 0) {
+                warningsList.innerHTML = warnings.map(w => `<li class="mb-1">${w}</li>`).join("");
+                warningsContainer.classList.remove('d-none');
+            } else {
+                warningsContainer.classList.add('d-none');
+                warningsList.innerHTML = '';
+            }
+
+            // 顯示 Modal
+            const ocrModal = new bootstrap.Modal(document.getElementById('ocrFeedbackModal'));
+            ocrModal.show();
+        }
+
+        // 執行 OCR 辨識與自動填充
+        function performOCR(file, row) {
+            const label = row.querySelector('label[title="掃描單據"]');
+            const icon = label.querySelector('i');
+            
+            // 顯示 Loading Spinner
+            label.style.pointerEvents = 'none';
+            label.style.opacity = '0.6';
+            const originalClass = icon.className;
+            icon.className = 'spinner-border spinner-border-sm text-primary';
+            icon.style.borderWidth = '2px';
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            fetch('/api/ocr-scan', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                // 將後端預先儲存好的實體檔案路徑繫結至隱藏 input 與眼睛按鈕，避免 browser 提交時丟失
+                if (data.file_path) {
+                    const previewBtn = row.querySelector('.btn-preview-receipt');
+                    if (previewBtn) {
+                        previewBtn.dataset.fileUrl = data.file_path;
+                    }
+                    const existingPathHidden = row.querySelector('.existing-receipt-path-hidden');
+                    if (existingPathHidden) {
+                        existingPathHidden.value = data.file_path;
+                    }
+                }
+
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    const recognizedDate = data.data || data.date;
+                    const recognizedAmount = data.amount;
+
+                    // 1. 檢查目前明細中是否已有相同日期與金額的項目 (排除當前行)
+                    let isLocalDuplicate = false;
+                    if (recognizedDate && recognizedAmount) {
+                        const rows = document.querySelectorAll('.expense-row');
+                        rows.forEach(r => {
+                            if (r === row) return; // 排除當前行
+                            const dInput = r.querySelector('input[name="expense_date[]"]');
+                            const aInput = r.querySelector('.expense-amount');
+                            if (dInput && aInput && dInput.value && aInput.value) {
+                                if (dInput.value === recognizedDate && parseFloat(aInput.value) === parseFloat(recognizedAmount)) {
+                                    isLocalDuplicate = true;
+                                }
+                            }
+                        });
+                    }
+
+                    if (isLocalDuplicate) {
+                        showDuplicateModal(recognizedAmount, recognizedDate, 'local');
+                        resetRow(row);
+                        return;
+                    }
+
+                    // 2. 檢查資料庫中是否有相同日期與金額的單據
+                    if (recognizedDate && recognizedAmount) {
+                        fetch(`/api/check-duplicate-receipt?date=${recognizedDate}&amount=${recognizedAmount}&exclude_request_id=${travelRequestId}`)
+                            .then(res => res.json())
+                            .then(dbData => {
+                                if (dbData.duplicate) {
+                                    showDuplicateModal(recognizedAmount, recognizedDate, 'database');
+                                    resetRow(row);
+                                } else {
+                                    fillOcrData(row, data, recognizedDate, recognizedAmount);
+                                }
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                // fallback to normal filling if API fails
+                                fillOcrData(row, data, recognizedDate, recognizedAmount);
+                            });
+                    } else {
+                        fillOcrData(row, data, recognizedDate, recognizedAmount);
+                    }
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('連線至 OCR 辨識服務時發生錯誤，請確認網路或服務是否正常啟動。');
+            })
+            .finally(() => {
+                // 還原按鈕狀態
+                label.style.pointerEvents = 'auto';
+                label.style.opacity = '1';
+                icon.className = originalClass;
+                icon.style.borderWidth = '';
+                // 清除 input file 的值，以利相同檔案可以重複觸發
+                row.querySelector('input[name="row_receipt[]"]').value = '';
+            });
+        }
+
+        const modifyFieldNames = [
+            'expense_date[]',
+            'expense_category[]',
+            'expense_name[]',
+            'requested_amount[]',
+            'receipt_type[]',
+            'has_tax_id[]',
+            'expense_location[]'
+        ];
+
+        // 監聽變動
+        container.addEventListener('input', function(e) {
+            const row = e.target.closest('.expense-row');
+            if (row) {
+                if (modifyFieldNames.includes(e.target.name)) {
+                    e.target.dataset.userModified = "true";
+                    e.target.dataset.needConfirm = "false";
+                }
+                
+                // 即時解鎖必填警告紅框
+                const val = e.target.value.trim();
+                const isEmpty = e.target.classList.contains('expense-amount') ? (parseFloat(val) <= 0 || val === "") : (val === "");
+                let target = e.target;
+                if (e.target.classList.contains('expense-amount')) {
+                    target = row.querySelector('.input-group') || e.target;
+                }
+                if (!isEmpty) {
+                    target.classList.remove('border-violation');
+                }
+
+                if (e.target.classList.contains('expense-amount')) {
+                    calculateTotal();
+                }
+                runAllRowValidations(row);
+            }
+        });
+
+        container.addEventListener('change', function(e) {
+            const row = e.target.closest('.expense-row');
+            if (row) {
+                if (modifyFieldNames.includes(e.target.name)) {
+                    e.target.dataset.userModified = "true";
+                    e.target.dataset.needConfirm = "false";
+                }
+                
+                // 即時解鎖必填警告紅框
+                const val = e.target.value.trim();
+                const isEmpty = e.target.classList.contains('expense-amount') ? (parseFloat(val) <= 0 || val === "") : (val === "");
+                let target = e.target;
+                if (e.target.classList.contains('expense-amount')) {
+                    target = row.querySelector('.input-group') || e.target;
+                }
+                if (!isEmpty) {
+                    target.classList.remove('border-violation');
+                }
+
+                // 手動修改日期或金額時進行重複檢測
+                if (e.target.name === 'expense_date[]' || e.target.classList.contains('expense-amount')) {
+                    const dateInput = row.querySelector('input[name="expense_date[]"]');
+                    const amtInput = row.querySelector('.expense-amount');
+                    if (dateInput && amtInput && dateInput.value && amtInput.value && parseFloat(amtInput.value) > 0) {
+                        const dateVal = dateInput.value;
+                        const amtVal = parseFloat(amtInput.value);
+
+                        // 1. 本地重複比對
+                        let isLocalDuplicate = false;
+                        const rows = document.querySelectorAll('.expense-row');
+                        rows.forEach(r => {
+                            if (r === row) return;
+                            const dInput = r.querySelector('input[name="expense_date[]"]');
+                            const aInput = r.querySelector('.expense-amount');
+                            if (dInput && aInput && dInput.value && aInput.value) {
+                                if (dInput.value === dateVal && parseFloat(aInput.value) === amtVal) {
+                                    isLocalDuplicate = true;
+                                }
+                            }
+                        });
+
+                        if (isLocalDuplicate) {
+                            showDuplicateModal(amtVal, dateVal, 'local');
+                            resetRow(row);
+                            return;
+                        }
+
+                        // 2. 資料庫重複比對
+                        fetch(`/api/check-duplicate-receipt?date=${dateVal}&amount=${amtVal}&exclude_request_id=${travelRequestId}`)
+                            .then(res => res.json())
+                            .then(dbData => {
+                                if (dbData.duplicate) {
+                                    showDuplicateModal(amtVal, dateVal, 'database');
+                                    resetRow(row);
+                                }
+                            })
+                            .catch(err => console.error(err));
+                    }
+                }
+
+                if (e.target.classList.contains('row-receipt-input')) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        // 產生瀏覽器記憶體網址
+                        const objectUrl = URL.createObjectURL(file);
+                        const previewBtn = row.querySelector('.btn-preview-receipt');
+                        if (previewBtn) {
+                            previewBtn.dataset.fileUrl = objectUrl;
+                            previewBtn.dataset.userUploaded = "true"; // 標記為使用者手動上傳憑證
+                            previewBtn.removeAttribute('disabled');
+                            previewBtn.classList.remove('btn-outline-secondary');
+                            previewBtn.classList.add('btn-outline-success');
+                        }
+                        
+                        const receiptUserUploadedInput = row.querySelector('.receipt-user-uploaded-hidden');
+                        if (receiptUserUploadedInput) receiptUserUploadedInput.value = 'true';
+                        
+                        // 已選擇憑證，即時解鎖憑證紅框
+                        const scanLabel = row.querySelector('label[title="掃描單據"]');
+                        if (scanLabel) scanLabel.classList.remove('border-violation');
+
+                        performOCR(file, row);
+                    }
+                }
+                runAllRowValidations(row);
+                if (e.target.classList.contains('expense-category')) {
+                    calculateTotal();
+                }
+            }
+        });
+
+        // 點擊眼睛按鈕時，進行憑證影像預覽
+        container.addEventListener('click', function(e) {
+            const previewBtn = e.target.closest('.btn-preview-receipt');
+            if (previewBtn) {
+                e.preventDefault();
+                const fileUrl = previewBtn.dataset.fileUrl;
+                if (fileUrl) {
+                    const previewModalImg = document.getElementById('previewModalImg');
+                    previewModalImg.src = fileUrl;
+                    
+                    const previewModal = new bootstrap.Modal(document.getElementById('receiptPreviewModal'));
+                    previewModal.show();
+                }
+            }
+        });
+
+        // 新增明細行
+        addBtn.addEventListener('click', function() {
+            const row = templateRow.cloneNode(true);
+            container.appendChild(row);
+            calculateTotal();
+            runAllRowValidations(row);
+        });
+
+
+        // 初始化 (優先嘗試從本地草稿載入暫存)
+        let isLoadingDraft = false;
+        const hasDraft = loadDraft();
+        if (!hasDraft) {
+            document.querySelectorAll('.expense-row').forEach(runAllRowValidations);
+            calculateTotal();
+        }
+
+        function triggerShake(el) {
+            el.classList.add('shake-element');
+            setTimeout(() => {
+                el.classList.remove('shake-element');
+            }, 400);
+        }
+
+        // --- 差旅報銷列印預覽與送出確認邏輯 ---
+        const btnSubmitTrigger = document.getElementById('btn-submit-trigger');
+        if (btnSubmitTrigger) {
+            btnSubmitTrigger.addEventListener('click', function() {
+                // 先進行 8 大必填防呆與震動動畫校驗
+                let hasEmpty = false;
+                let firstEmptyEl = null;
+
+                const rows = document.querySelectorAll('.expense-row');
+                rows.forEach(row => {
+                    // 1. 憑證校驗 (眼睛按鈕 dataset.fileUrl)
+                    const previewBtn = row.querySelector('.btn-preview-receipt');
+                    const scanLabel = row.querySelector('label[title="掃描單據"]');
+                    if (!previewBtn || !previewBtn.dataset.fileUrl) {
+                        hasEmpty = true;
+                        if (scanLabel) {
+                            scanLabel.classList.add('border-violation');
+                            triggerShake(scanLabel);
+                            if (!firstEmptyEl) firstEmptyEl = scanLabel;
+                        }
+                    }
+
+                    // 2. 日期、類別、品名、金額、憑證類型、統編、地點校驗
+                    const checkFields = [
+                        { el: row.querySelector('input[name="expense_date[]"]'), isAmt: false },
+                        { el: row.querySelector('select[name="expense_category[]"]'), isAmt: false },
+                        { el: row.querySelector('input[name="expense_name[]"]'), isAmt: false },
+                        { el: row.querySelector('input[name="requested_amount[]"]'), isAmt: true },
+                        { el: row.querySelector('select[name="receipt_type[]"]'), isAmt: false },
+                        { el: row.querySelector('input[name="has_tax_id[]"]'), isAmt: false },
+                        { el: row.querySelector('select[name="expense_location[]"]'), isAmt: false }
+                    ];
+
+                    checkFields.forEach(({ el, isAmt }) => {
+                        if (!el) return;
+                        const val = el.value.trim();
+                        const isEmpty = isAmt ? (parseFloat(val) <= 0 || val === "") : (val === "");
+                        
+                        let target = el;
+                        if (el.classList.contains('expense-amount')) {
+                            target = row.querySelector('.input-group') || el;
+                        }
+
+                        if (isEmpty) {
+                            hasEmpty = true;
+                            target.classList.add('border-violation');
+                            triggerShake(target);
+                            if (!firstEmptyEl) firstEmptyEl = target;
+                        }
+                    });
+                });
+
+                if (hasEmpty) {
+                    if (firstEmptyEl) {
+                        firstEmptyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (typeof firstEmptyEl.focus === 'function') {
+                            const fileInput = firstEmptyEl.querySelector('input[type="file"]');
+                            if (fileInput) fileInput.focus();
+                            else firstEmptyEl.focus();
+                        }
+                    }
+                    return; // 攔截不予彈出確認 Modal！
+                }
+
+                // 2.2 檢查是否有非金額與統編欄位具有紅框 (如果有紅框就不能送出，除了金額與統編呈現紅框可以送出)
+                let hasOtherViolation = false;
+                let firstViolationEl = null;
+
+                rows.forEach(row => {
+                    const violations = row.querySelectorAll('.border-violation');
+                    violations.forEach(el => {
+                        // 排除金額、金額容器，以及統編欄位本身
+                        const isAmtElement = el.classList.contains('expense-amount') || el.classList.contains('input-group');
+                        const isTaxIdElement = el.classList.contains('expense-tax-id');
+                        if (!isAmtElement && !isTaxIdElement) {
+                            hasOtherViolation = true;
+                            triggerShake(el);
+                            if (!firstViolationEl) firstViolationEl = el;
+                        }
+                    });
+                });
+
+                if (hasOtherViolation) {
+                    if (firstViolationEl) {
+                        firstViolationEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        if (typeof firstViolationEl.focus === 'function') {
+                            firstViolationEl.focus();
+                        }
+                    }
+                    return; // 攔截不予送出！
+                }
+
+                // 2. 蒐集並計算風險評估因子
+                let hasRisk = false;
+                let riskReasons = [];
+
+                // 1.1 實際總額 !== 申請總預算 (預算風險)
+                let totalActual = 0;
+                rows.forEach(row => {
+                    const amtInput = row.querySelector('.expense-amount');
+                    if (amtInput) totalActual += (parseFloat(amtInput.value) || 0);
+                });
+                const estTotal = budgetAccommodation + budgetTransportation + budgetMeals + budgetMisc;
+                if (Math.abs(totalActual - estTotal) > 0.01) {
+                    hasRisk = true;
+                    riskReasons.push("實際報銷總額與原申請總預算不符");
+                }
+
+                // 1.2 檢查單項超額且無合理解釋
+                let hasLimitViolation = false;
+                rows.forEach(row => {
+                    const validationRow = row.querySelector('.validation-row');
+                    if (validationRow && !validationRow.classList.contains('d-none')) {
+                        const noteInput = row.querySelector('.expense-note');
+                        if (!noteInput || !noteInput.value.trim() || noteInput.value.trim().length < 2) {
+                            hasLimitViolation = true;
+                        }
+                    }
+                });
+                if (hasLimitViolation) {
+                    hasRisk = true;
+                    riskReasons.push("單項支出超額且未填寫合理解釋理由");
+                }
+
+                // 1.3 檢查地點是否符合本次出差核准地
+                let hasLocationDiscrepancy = false;
+                rows.forEach(row => {
+                    const locationSelect = row.querySelector('select[name="expense_location[]"]');
+                    if (locationSelect && locationSelect.value && !approvedDestinations.includes(locationSelect.value)) {
+                        hasLocationDiscrepancy = true;
+                    }
+                });
+                if (hasLocationDiscrepancy) {
+                    hasRisk = true;
+                    riskReasons.push("報銷發生地點與本次核准出差目的地不符");
+                }
+
+                // 1.4 疑似重複報銷項目比對
+                let hasDuplicate = false;
+                let seenItems = new Set();
+                rows.forEach(row => {
+                    const dateInput = row.querySelector('input[name="expense_date[]"]');
+                    const amtInput = row.querySelector('.expense-amount');
+                    if (dateInput && amtInput && dateInput.value && amtInput.value) {
+                        const key = dateInput.value + "_" + amtInput.value;
+                        if (seenItems.has(key)) hasDuplicate = true;
+                        seenItems.add(key);
+                    }
+                });
+                if (hasDuplicate) {
+                    hasRisk = true;
+                    riskReasons.push("明細中含有相同日期與金額的疑似重複項目");
+                }
+
+                // 1.5 檢查統編是否與公司統編 58711014 不符
+                let hasTaxIdMismatch = false;
+                rows.forEach(row => {
+                    const taxIdInput = row.querySelector('.expense-tax-id');
+                    if (taxIdInput) {
+                        const taxIdVal = taxIdInput.value.trim().toLowerCase();
+                        if (taxIdVal && taxIdVal !== 'no' && taxIdVal !== '無' && taxIdVal !== 'false') {
+                            const digits = taxIdVal.replace(/\D/g, '');
+                            if (digits !== '58711014') {
+                                hasTaxIdMismatch = true;
+                             }
+                        }
+                    }
+                });
+                if (hasTaxIdMismatch) {
+                    hasRisk = true;
+                    riskReasons.push("統一編號與公司統編 (58711014) 不符");
+                }
+
+                // 2. 更新 Modal 評級顯示 (精簡二元呈現，無任何 90分/10分 數字)
+                const riskBadge = document.getElementById('modalConfirmRiskBadge');
+                const riskDesc = document.getElementById('modalConfirmRiskDesc');
+                const riskReasonsContainer = document.getElementById('modalConfirmRiskReasonsContainer');
+                const riskReasonsList = document.getElementById('modalConfirmRiskReasonsList');
+
+                if (hasRisk) {
+                    riskBadge.innerHTML = '<span class="badge bg-danger rounded-pill px-3 py-2 fs-6">🚨 高風險</span>';
+                    riskDesc.innerHTML = '送出後，系統將會啟用<b>【主管嚴格審批工作流】</b>，需要您的部門主管親自確認超支、地點或超額理由並簽核同意。';
+                    riskReasonsList.innerHTML = riskReasons.map(r => `<li class="mb-1">${r}</li>`).join("");
+                    riskReasonsContainer.classList.remove('d-none');
+                } else {
+                    riskBadge.innerHTML = '<span class="badge bg-success rounded-pill px-3 py-2 fs-6">🟢 低風險</span>';
+                    riskDesc.innerHTML = '您的報銷單完美合規！送出後將開啟<b>【綠色快捷通關】</b>直接跳過主管審批，遞交會計撥款，大幅縮短流程時效！';
+                    riskReasonsContainer.classList.add('d-none');
+                    riskReasonsList.innerHTML = '';
+                }
+
+                // 3. 渲染報銷項目預覽列表
+                const previewTableBody = document.getElementById('modalConfirmPreviewTableBody');
+                previewTableBody.innerHTML = '';
+                
+                rows.forEach(row => {
+                    const dateVal = row.querySelector('input[name="expense_date[]"]').value;
+                    const catVal = row.querySelector('select[name="expense_category[]"]').value;
+                    const itemVal = row.querySelector('input[name="expense_name[]"]').value;
+                    const amtVal = row.querySelector('.expense-amount').value;
+                    const locVal = row.querySelector('select[name="expense_location[]"]').value;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="small py-2 ps-3">${dateVal}</td>
+                        <td class="py-2"><span class="badge bg-light text-dark border small">${catVal}</span></td>
+                        <td class="small py-2">${itemVal} <span class="text-muted">@ ${locVal || '無'}</span></td>
+                        <td class="text-end pe-3 fw-bold text-primary small py-2">$ ${parseFloat(amtVal).toLocaleString()}</td>
+                    `;
+                    previewTableBody.appendChild(tr);
+                });
+
+                document.getElementById('modalConfirmTotalDisplay').innerText = document.getElementById('footerTotalDisplay').innerText;
+
+                // 4. 顯示 Modal
+                const confirmModal = new bootstrap.Modal(document.getElementById('submitConfirmModal'));
+                confirmModal.show();
+            });
+        }
+
+        // 預覽列印按鈕點擊事件 (調用 window.print())
+        const btnPrintPreview = document.getElementById('btn-print-preview');
+        if (btnPrintPreview) {
+            btnPrintPreview.addEventListener('click', function(e) {
+                e.preventDefault();
+                window.print();
+            });
+        }
+
+        // 確認送出按鈕點擊事件 (正式 submit 表單)
+        const btnRealSubmit = document.getElementById('btn-real-submit');
+        if (btnRealSubmit) {
+            btnRealSubmit.addEventListener('click', function(e) {
+                e.preventDefault();
+                localStorage.removeItem(DRAFT_KEY);
+                document.getElementById('expenseForm').submit();
+            });
+        }
+
+        // 綁定表單 submit 事件作為備用安全機制以清除草稿
+        const expenseForm = document.getElementById('expenseForm');
+        if (expenseForm) {
+            expenseForm.addEventListener('submit', function() {
+                localStorage.removeItem(DRAFT_KEY);
+            });
+        }
+    });
+</script>
+
+<!-- 重複辨識提醒視窗 Modal -->
+<div class="modal fade" id="duplicateReceiptModal" tabindex="-1" aria-labelledby="duplicateReceiptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header border-0 bg-warning-subtle py-3 px-4" id="dupModalHeaderBar" style="background-color: #FEF3C7 !important;">
+                <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2" id="duplicateReceiptModalLabel" style="color: #D97706 !important;">
+                    <i class="bi bi-exclamation-octagon-fill fs-4" id="dupModalTitleIcon"></i> <span id="dupModalTitleText">重複申報警示</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-3">
+                    <i class="bi bi-file-earmark-diff text-warning" id="dupModalCenterIcon" style="font-size: 3.5rem; color: #D97706 !important;"></i>
+                </div>
+                <h6 class="fw-bold text-dark text-center mb-3" id="dupModalHeader">系統檢測到疑似重複辨識的單據！</h6>
+                <p class="text-muted small mb-0" id="dupModalBody1">
+                    您剛剛上傳辨識的單據（金額：<span class="fw-bold text-danger" id="dupModalAmount">NT$ 0</span>，日期：<span class="fw-bold text-dark" id="dupModalDate">-</span>），其<b>金額與日期</b>與目前表單明細中已存在的其他項目完全一致。
+                </p>
+                <p class="text-muted small mt-2 mb-0" id="dupModalBody2">
+                    請確認此單據是否已在本報銷單中申報過，以避免重複申報。
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-0 pb-3 px-4">
+                <button type="button" class="btn btn-warning px-4 py-2 w-100 fw-bold text-white" id="dupModalBtn" data-bs-dismiss="modal" style="border-radius: 10px; background-color: #D97706; border: none;">
+                    我理解了，繼續填寫
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- OCR 辨識結果與提醒視窗 Modal -->
+<div class="modal fade" id="ocrFeedbackModal" tabindex="-1" aria-labelledby="ocrFeedbackModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header border-0 bg-light py-3 px-4">
+                <h5 class="modal-title fw-bold text-primary d-flex align-items-center gap-2" id="ocrFeedbackModalLabel">
+                    <i class="bi bi-robot fs-4"></i> AI OCR 辨識結果與填寫提醒
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- 1. 成功自動辨識填寫項目 -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-3 d-flex align-items-center gap-2" style="color: var(--brand-primary);">
+                        <i class="bi bi-check-circle-fill text-success"></i> AI 已自動填入以下明細：
+                    </h6>
+                    <div class="card border-0 bg-light rounded-3 p-3">
+                        <ul class="list-unstyled mb-0 small">
+                            <li class="mb-2 d-flex justify-content-between">
+                                <span class="text-muted">發票/單據日期：</span>
+                                <span class="fw-bold text-dark" id="modalOcrDate">-</span>
+                            </li>
+                            <li class="mb-2 d-flex justify-content-between">
+                                <span class="text-muted">費用名稱/商家：</span>
+                                <span class="fw-bold text-dark" id="modalOcrItem">-</span>
+                            </li>
+                            <li class="mb-2 d-flex justify-content-between">
+                                <span class="text-muted">辨識金額：</span>
+                                <span class="fw-bold text-primary fs-6" id="modalOcrAmount">NT$ 0</span>
+                            </li>
+                            <li class="mb-2 d-flex justify-content-between">
+                                <span class="text-muted">憑證類型：</span>
+                                <span class="fw-bold text-dark" id="modalOcrReceiptType">-</span>
+                            </li>
+                            <li class="d-flex justify-content-between">
+                                <span class="text-muted">統一編號：</span>
+                                <span class="fw-bold text-dark" id="modalOcrTaxId">-</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 2. 手動確認提醒 (核心提醒) -->
+                <div class="alert alert-warning border-0 p-3 mb-4 d-flex align-items-start gap-2" style="border-radius: 12px; background-color: #FFFBEB;">
+                    <i class="bi bi-exclamation-triangle-fill fs-5 mt-1" style="color: #D97706;"></i>
+                    <div class="small">
+                        <div class="fw-bold mb-2" style="color: #92400E;">💡 手動確認提醒：</div>
+                        <p class="mb-2 text-muted" style="color: #B45309;">
+                            我們已在下方表單的明細列中，用 <span class="badge bg-primary text-white fw-bold">藍色框框</span> 標示出需要您<b>自行填寫</b>或<b>手動確認</b>的欄位：
+                        </p>
+                        <ul id="modalOcrConfirmList" class="mb-2 ps-3 text-muted" style="color: #B45309; font-weight: 500; font-size: 0.85rem;">
+                            <!-- JS will inject dynamic list items here -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 3. 即時異常警告區 (錯誤提示) -->
+                <div id="modalOcrWarnings" class="d-none">
+                    <h6 class="fw-bold mb-3 text-danger d-flex align-items-center gap-2">
+                        <i class="bi bi-x-circle-fill"></i> 即時檢測出異常/錯誤：
+                    </h6>
+                    <div class="alert alert-danger border-0 p-3 mb-0" style="border-radius: 12px; background-color: #FEF2F2;">
+                        <ul class="mb-0 ps-3 small text-danger" id="modalWarningsList">
+                            <!-- JS will inject warning items here -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0 pb-3 px-4">
+                <button type="button" class="btn btn-primary px-4 py-2 w-100 fw-bold" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    我理解了，開始手動確認
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 憑證影像預覽視窗 Modal -->
+<div class="modal fade" id="receiptPreviewModal" tabindex="-1" aria-labelledby="receiptPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header border-0 bg-light py-3 px-4">
+                <h5 class="modal-title fw-bold text-primary d-flex align-items-center gap-2" id="receiptPreviewModalLabel">
+                    <i class="bi bi-image fs-4"></i> 原始憑證檔案預覽
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-dark d-flex align-items-center justify-content-center" style="min-height: 400px;">
+                <img id="previewModalImg" src="" class="img-fluid rounded border shadow-sm" style="max-height: 70vh; display: block; margin: 0 auto; object-fit: contain;">
+            </div>
+            <div class="modal-footer border-0 py-3 px-4 bg-light">
+                <button type="button" class="btn btn-secondary px-4 py-2 fw-bold w-100" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    關閉預覽
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 差旅報銷送出確認與列印預覽 Modal -->
+<div class="modal fade" id="submitConfirmModal" tabindex="-1" aria-labelledby="submitConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header border-0 bg-light py-3 px-4">
+                <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2" id="submitConfirmModalLabel">
+                    <i class="bi bi-file-earmark-check fs-4 text-primary"></i> 報銷單送出確認與列印預覽
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- 1. 系統風險即時評估評級 -->
+                <div class="card border-0 bg-light rounded-4 shadow-sm mb-4">
+                    <div class="card-body p-3 p-md-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="modalConfirmRiskBadge">
+                                <!-- JS will inject badge here -->
+                            </div>
+                            <div>
+                                <div class="fw-bold text-dark mb-1">系統風險即時評級</div>
+                                <p class="text-muted mb-0 small" id="modalConfirmRiskDesc">
+                                    <!-- JS will inject description here -->
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 即時異常疑點清單 (僅在高風險時顯示) -->
+                <div id="modalConfirmRiskReasonsContainer" class="alert alert-danger border-0 p-3 mb-4 d-none" style="border-radius: 12px; background-color: #FEF2F2;">
+                    <h6 class="fw-bold mb-2 text-danger d-flex align-items-center gap-2" style="font-size: 0.95rem;">
+                        <i class="bi bi-exclamation-octagon-fill"></i> 本單觸發以下高風險疑點：
+                    </h6>
+                    <ul class="mb-0 ps-3 small text-danger fw-medium" id="modalConfirmRiskReasonsList">
+                        <!-- JS will inject reasons here -->
+                    </ul>
+                </div>
+
+                <!-- 3. 報銷明細即時預覽 -->
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-list-task me-1 text-primary"></i> 報銷項目明細預覽</h6>
+                <div class="table-responsive rounded-3 border bg-white mb-3" style="max-height: 250px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="py-2 ps-3">日期</th>
+                                <th class="py-2">類別</th>
+                                <th class="py-2">費用名稱與地點</th>
+                                <th class="py-2 text-end pe-3">金額</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalConfirmPreviewTableBody">
+                            <!-- JS will inject rows here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 4. 總金額預覽 -->
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-light rounded-3 mb-3 border">
+                    <span class="fw-bold text-dark small">報銷預估總計</span>
+                    <span class="fw-bold text-danger fs-5" id="modalConfirmTotalDisplay">NT$ 0</span>
+                </div>
+            </div>
+            <div class="modal-footer border-0 bg-light py-3 px-4 d-flex gap-2">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    返回修改
+                </button>
+                <button type="button" id="btn-print-preview" class="btn btn-outline-primary rounded-pill px-4 fw-bold">
+                    <i class="bi bi-printer me-1"></i> 預覽列印報銷單
+                </button>
+                <button type="button" id="btn-real-submit" class="btn btn-success rounded-pill px-4 fw-bold text-white shadow-sm flex-grow-1" style="background-color: var(--brand-secondary); border: none;">
+                    <i class="bi bi-send-check-fill me-1"></i> 確認送出報銷單
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+

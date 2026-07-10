@@ -1,0 +1,519 @@
+{% extends 'base.html' %}
+
+{% block content_header %}
+<h4 class="mb-0 fw-bold">審核報銷單</h4>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* 違規與超限警示：紅色框框 / 外框 */
+    .border-violation {
+        border: 2px solid #ef4444 !important;
+        background-color: #fef2f2 !important;
+        box-shadow: 0 0 0 0.15rem rgba(239, 68, 68, 0.15) !important;
+        border-radius: 6px !important;
+        padding: 2px 6px !important;
+        display: inline-block;
+    }
+
+    /* 使用者手動修改標示：藍色框框 / 外框 */
+    .border-modified {
+        border: 2px solid #3b82f6 !important;
+        background-color: #eff6ff !important;
+        box-shadow: 0 0 0 0.15rem rgba(59, 130, 246, 0.15) !important;
+        border-radius: 6px !important;
+        padding: 2px 6px !important;
+        display: inline-block;
+    }
+
+    /* 預覽按鈕專屬樣式覆寫，維持圓形與正中對齊，不被藍框紅框的 inline-block/padding 變形 */
+    .btn-preview-receipt.border-modified,
+    .btn-preview-receipt.border-violation {
+        border-radius: 50% !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 32px !important;
+        height: 32px !important;
+    }
+
+    /* 確保所有唯讀/禁用輸入框的字體顏色與透明度正常（防止瀏覽器預設樣式使字體變淡或看不見） */
+    .expense-row input:disabled,
+    .expense-row select:disabled {
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+        opacity: 1 !important;
+    }
+    .expense-row input:disabled.text-danger {
+        color: #ef4444 !important;
+        -webkit-text-fill-color: #ef4444 !important;
+    }
+    .expense-row input:disabled.text-primary {
+        color: #2563eb !important;
+        -webkit-text-fill-color: #2563eb !important;
+    }
+
+    /* 當外層 input-group 有紅框/藍框時，內部輸入框與前綴文字均設為背景透明，以呈現統一底色 */
+    .expense-row .input-group.border-violation input,
+    .expense-row .input-group.border-violation .input-group-text,
+    .expense-row .input-group.border-modified input,
+    .expense-row .input-group.border-modified .input-group-text {
+        background-color: transparent !important;
+    }
+    
+    /* 金額前置 $ 符號的文字顏色修正 */
+    .expense-row .input-group.border-violation .input-group-text {
+        color: #ef4444 !important;
+    }
+    .expense-row .input-group.border-modified .input-group-text {
+        color: #2563eb !important;
+    }
+
+    /* 確保 input-group 在有紅/藍框時依然保持 flex 排版，防止金額因 display: inline-block 被擠壓或換行消失 */
+    .expense-row .input-group.border-violation,
+    .expense-row .input-group.border-modified {
+        display: flex !important;
+        padding: 0 !important;
+    }
+
+    /* 審核端明細無色框唯讀樣式 (僅在有修改或違規時才亮起藍/紅框，平時無框透明) */
+    .expense-row input:disabled:not(.border-violation):not(.border-modified),
+    .expense-row select:disabled:not(.border-violation):not(.border-modified) {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        font-weight: 500;
+        cursor: default !important;
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        -moz-appearance: none !important;
+    }
+
+    .expense-row .input-group:not(.border-violation):not(.border-modified) {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
+
+    .expense-row .input-group:not(.border-violation):not(.border-modified) .input-group-text,
+    .expense-row .input-group:not(.border-violation):not(.border-modified) input:disabled {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    /* 理由說明欄位在唯讀狀態下全寬度呈現 (預設為中性灰色) */
+    .expense-note {
+        display: block !important;
+        width: 100% !important;
+        padding: 8px 12px !important;
+        background-color: #f8fafc !important; /* 中性灰色背景 */
+        border: 1px solid #cbd5e1 !important; /* 中性灰色外框 */
+        border-radius: 8px !important;
+        transition: all 0.3s ease;
+        cursor: default !important;
+    }
+    .expense-note.border-modified {
+        background-color: #f0f9ff !important; /* 藍色背景 */
+        border: 2px solid #3b82f6 !important; /* 藍色外框 */
+        box-shadow: 0 0 0 0.15rem rgba(59, 130, 246, 0.15) !important;
+    }
+    .expense-note.border-violation {
+        background-color: #fef2f2 !important; /* 紅色背景 */
+        border: 2px solid #ef4444 !important; /* 紅色外框 */
+        box-shadow: 0 0 0 0.15rem rgba(239, 68, 68, 0.15) !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- 1. Top Panel: Employee Info, Risk Assessment, Budget Comparisons (Full Width!) -->
+    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+        <div class="card-body p-4">
+            <div class="row g-4 align-items-center">
+                <!-- Column 1: Applicant Info -->
+                <div class="col-md-3 text-center border-end">
+                    <img src="https://ui-avatars.com/api/?name={{ req.employee.name }}&size=64&background=F1F5F9&color=22277F&rounded=true" alt="Avatar" class="mb-2" style="width: 64px; height: 64px;">
+                    <h5 class="fw-bold mb-1">{{ req.employee.name }}</h5>
+                    <p class="text-muted mb-2 small">{{ req.employee.department }} | {{ req.destination }}</p>
+                    
+                    <div class="mt-2">
+                        <span class="small text-muted d-block mb-1">簽核狀態</span>
+                        {% if req.status == 'ExpensePendingManager' %}
+                            <span class="badge rounded-pill bg-warning text-dark px-3 py-1">主管審核中</span>
+                        {% elif req.status == 'ExpensePendingAccounting' %}
+                            <span class="badge rounded-pill bg-info text-white px-3 py-1">會計審核中</span>
+                        {% elif req.status == 'Reimbursed' %}
+                            <span class="badge rounded-pill bg-primary text-white px-3 py-1" style="background-color: var(--brand-primary) !important;">出納撥款中</span>
+                        {% elif req.status == 'Rejected' %}
+                            <span class="badge rounded-pill bg-danger text-white px-3 py-1">已駁回</span>
+                        {% else %}
+                            <span class="badge rounded-pill bg-secondary text-white px-3 py-1">{{ req.status }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Column 2: Risk Assessment -->
+                <div class="col-md-4 border-end">
+                    <div class="p-3 rounded-4 h-100 d-flex flex-column justify-content-center {% if req.risk_level == 'High' %}bg-danger-subtle text-danger{% else %}bg-success-subtle text-success{% endif %}" style="border-radius: 14px !important;">
+                        <div class="fw-bold text-uppercase mb-1" style="font-size: 0.72rem; letter-spacing: 0.5px; opacity: 0.85;">系統風險評估</div>
+                        <h4 class="fw-bold mb-2" style="margin: 0;">{{ '高風險' if req.risk_level == 'High' else '低風險' }}</h4>
+                        {% if req.risk_level == 'High' and risk_reasons %}
+                        <div class="text-start border-top border-danger border-opacity-10 pt-2 mt-1" style="font-size: 0.75rem; line-height: 1.4;">
+                            <div class="fw-bold mb-1" style="opacity: 0.85;"><i class="bi bi-info-circle-fill me-1"></i>觸發以下風險因子：</div>
+                            <ul class="mb-0 ps-3" style="list-style-type: disc;">
+                                {% for reason in risk_reasons %}
+                                <li class="mb-0 fw-semibold">{{ reason }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Column 3: Budget Comparisons (2x2 Grid + totals) -->
+                <div class="col-md-5">
+                    <div class="small fw-bold text-muted mb-2">預算與實際消費對照 (4大類別)</div>
+                    
+                    {% set act_accommodation = req.expenses | selectattr('expense_category', 'equalto', '住宿費') | map(attribute='requested_amount') | sum %}
+                    {% set act_transportation = req.expenses | selectattr('expense_category', 'equalto', '交通費') | map(attribute='requested_amount') | sum %}
+                    {% set act_meals = req.expenses | selectattr('expense_category', 'equalto', '伙食費') | map(attribute='requested_amount') | sum %}
+                    {% set act_misc = req.expenses | selectattr('expense_category', 'equalto', '雜費') | map(attribute='requested_amount') | sum %}
+                    
+                    <div class="row g-2">
+                        <!-- 住宿 -->
+                        <div class="col-6">
+                            <div class="p-2 rounded-3 bg-light border border-light shadow-sm">
+                                <div class="d-flex justify-content-between small" style="font-size: 0.72rem;">
+                                    <span class="fw-bold text-dark"><i class="bi bi-house-door-fill text-primary"></i> 住宿</span>
+                                    <span class="text-muted">/ 預算</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="fw-bold {% if act_accommodation > req.est_accommodation %}text-danger{% else %}text-slate-800{% endif %}" style="font-size: 0.82rem;">
+                                        ${{ "{:,.0f}".format(act_accommodation) }}
+                                    </span>
+                                    <span class="text-muted small" style="font-size: 0.7rem;">${{ "{:,.0f}".format(req.est_accommodation) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 交通 -->
+                        <div class="col-6">
+                            <div class="p-2 rounded-3 bg-light border border-light shadow-sm">
+                                <div class="d-flex justify-content-between small" style="font-size: 0.72rem;">
+                                    <span class="fw-bold text-dark"><i class="bi bi-car-front-fill text-primary"></i> 交通</span>
+                                    <span class="text-muted">/ 預算</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="fw-bold {% if act_transportation > req.est_transportation %}text-danger{% else %}text-slate-800{% endif %}" style="font-size: 0.82rem;">
+                                        ${{ "{:,.0f}".format(act_transportation) }}
+                                    </span>
+                                    <span class="text-muted small" style="font-size: 0.7rem;">${{ "{:,.0f}".format(req.est_transportation) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 伙食 -->
+                        <div class="col-6">
+                            <div class="p-2 rounded-3 bg-light border border-light shadow-sm">
+                                <div class="d-flex justify-content-between small" style="font-size: 0.72rem;">
+                                    <span class="fw-bold text-dark"><i class="bi bi-egg-fried text-primary"></i> 伙食</span>
+                                    <span class="text-muted">/ 預算</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="fw-bold {% if act_meals > req.est_meals %}text-danger{% else %}text-slate-800{% endif %}" style="font-size: 0.82rem;">
+                                        ${{ "{:,.0f}".format(act_meals) }}
+                                    </span>
+                                    <span class="text-muted small" style="font-size: 0.7rem;">${{ "{:,.0f}".format(req.est_meals) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 雜費 -->
+                        <div class="col-6">
+                            <div class="p-2 rounded-3 bg-light border border-light shadow-sm">
+                                <div class="d-flex justify-content-between small" style="font-size: 0.72rem;">
+                                    <span class="fw-bold text-dark"><i class="bi bi-collection-fill text-primary"></i> 雜費</span>
+                                    <span class="text-muted">/ 預算</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="fw-bold {% if act_misc > req.est_misc %}text-danger{% else %}text-slate-800{% endif %}" style="font-size: 0.82rem;">
+                                        ${{ "{:,.0f}".format(act_misc) }}
+                                    </span>
+                                    <span class="text-muted small" style="font-size: 0.7rem;">${{ "{:,.0f}".format(req.est_misc) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Total summary -->
+                    {% set total_budget = req.est_accommodation + req.est_transportation + req.est_meals + req.est_misc %}
+                    {% set total_actual = req.expenses | sum(attribute='requested_amount') %}
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top small" style="font-size: 0.8rem;">
+                        <div>
+                            <span class="fw-bold text-muted">原申請預算總額: </span>
+                            <span class="fw-bold text-slate-800" style="font-size: 0.95rem;">${{ "{:,.0f}".format(total_budget) }}</span>
+                        </div>
+                        <div>
+                            <span class="fw-bold text-muted">實報總金額: </span>
+                            <span class="fw-bold {% if total_actual > total_budget %}text-danger{% else %}text-primary{% endif %}" style="font-size: 1.05rem;">${{ "{:,.0f}".format(total_actual) }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Middle Panel: Expense Details (Full Width!) -->
+    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+        <div class="card-header bg-white p-4 border-bottom-0 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-list-task me-2 text-primary"></i>消費細目明細</h5>
+            <!-- 標註圖例 -->
+            {% if req.status not in ['Reimbursed', 'Rejected'] %}
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2" style="font-size: 0.85rem; font-weight: 500; color: #475569;">
+                    <span style="display: inline-block; width: 12px; height: 12px; border: 2px solid #3b82f6; background-color: #eff6ff; border-radius: 3px;"></span>
+                    <span>藍框：員工修改過 OCR 辨識結果</span>
+                </div>
+                <div class="d-flex align-items-center gap-2" style="font-size: 0.85rem; font-weight: 500; color: #475569;">
+                    <span style="display: inline-block; width: 12px; height: 12px; border: 2px solid #ef4444; background-color: #fef2f2; border-radius: 3px;"></span>
+                    <span>紅框：超過預算或違反申報規定</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="card-body p-4 pt-0">
+            <!-- Detail Items Table Wrapper for Horizontal Scroll on Small Screens -->
+            <div class="expense-table-container mb-3" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                <div style="min-width: 1100px;">
+                    <!-- Detail Items Header -->
+                    <div class="d-flex align-items-center gap-2 fw-bold text-muted small border-bottom pb-2 mb-3" style="padding: 0 17px;">
+                        <div style="width: 80px;" class="text-center"><i class="bi bi-file-earmark-text"></i> 憑證</div>
+                        <div style="width: 150px;">日期</div>
+                        <div style="width: 150px;">類別</div>
+                        <div style="flex: 1.5 1 0px; min-width: 150px;">費用名稱</div>
+                        <div style="width: 130px;">金額</div>
+                        <div style="width: 135px;">憑證類型</div>
+                        <div style="width: 120px;">統一編號</div>
+                        <div style="flex: 1.2 1 0px; min-width: 120px;">地點</div>
+                    </div>
+
+                    <div id="expense-container">
+                        {% for exp in req.expenses %}
+                        <!-- 預算政策與金額符合性判定已於後端計算繫結 -->
+                        {% set show_borders = (req.status not in ['Reimbursed', 'Rejected']) %}
+                        {% set is_amt_violation = exp.is_amt_violation if show_borders else false %}
+
+                        <!-- 規則檢驗變數定義 -->
+                        {% set is_date_violation = ((exp.expense_date < req.start_date or exp.expense_date > req.end_date) if show_borders else false) %}
+                        {% set is_loc_violation = ((exp.expense_location and exp.expense_location not in req.destination) if show_borders else false) %}
+                        {% set is_tax_violation = (exp.tax_id_number and exp.tax_id_number != '58711014' if show_borders else false) %}
+
+                        <!-- 修改標示判定變數定義 (比對 OCR 原始值) -->
+                        {% set has_receipt = (exp.receipt_path is not none and exp.receipt_path != "") %}
+                        {% set is_date_modified = (has_receipt and ((exp.expense_date|string) != (exp.ocr_date|string if exp.ocr_date else '')) if show_borders else false) %}
+                        {% set is_cat_modified = (has_receipt and ((exp.expense_category or '') != (exp.ocr_category or '')) if show_borders else false) %}
+                        {% set is_item_modified = (has_receipt and ((exp.expense_name or '') != (exp.ocr_expense_name or '')) if show_borders else false) %}
+                        {% set is_loc_modified = (has_receipt and ((exp.expense_location or '') != (exp.ocr_expense_location or '')) if show_borders else false) %}
+                        {% set is_type_modified = (has_receipt and ((exp.receipt_type or '') != (exp.ocr_receipt_type or '')) if show_borders else false) %}
+                        {% set is_tax_modified = (has_receipt and ((exp.tax_id_number or '') != (exp.ocr_tax_id_number or '')) if show_borders else false) %}
+                        {% set is_amt_modified = (has_receipt and ((exp.requested_amount|int) != (exp.ocr_amount|int if exp.ocr_amount else 0)) if show_borders else false) %}
+                        {% set is_receipt_modified = (exp.is_receipt_user_uploaded if show_borders else false) %}
+
+                        <div class="expense-row mb-3 bg-light p-3 rounded-4 border border-light position-relative">
+                            <div class="d-flex align-items-center gap-2">
+                                <!-- 1. 憑證 -->
+                                <div style="width: 80px;" class="text-center d-flex justify-content-center gap-1">
+                                    {% if exp.receipt_path %}
+                                    <button type="button" class="btn btn-sm {% if is_receipt_modified %}btn-outline-primary border-modified{% else %}btn-outline-success{% endif %} p-0 rounded-circle shadow-sm d-flex align-items-center justify-content-center btn-preview-receipt" data-file-url="{{ exp.receipt_path }}" data-bs-toggle="modal" data-bs-target="#receiptPreviewModal" style="width: 32px; height: 32px;" title="{% if is_receipt_modified %}員工手動上傳/修改過憑證檔案{% else %}查看憑證檔案{% endif %}">
+                                        <i class="bi bi-eye fs-6"></i>
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary p-0 rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" disabled>
+                                        <i class="bi bi-eye-slash fs-6"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+
+                                <!-- 2. 日期 -->
+                                <div style="width: 150px;">
+                                    <input type="date" class="form-control border-0 bg-white shadow-sm text-muted small px-2 {% if is_date_violation %}border-violation{% elif is_date_modified %}border-modified{% endif %}" value="{{ exp.expense_date }}" disabled style="border-radius: 8px;" title="{% if is_date_violation %}單據日期不在出差範圍內！{% elif is_date_modified %}員工手動修改過日期（原始 OCR 辨識值：{{ exp.ocr_date }}）{% endif %}">
+                                </div>
+
+                                <!-- 3. 類別 -->
+                                <div style="width: 150px;">
+                                    <input type="text" class="form-control border-0 bg-white shadow-sm fw-medium px-2 {% if is_cat_modified %}border-modified text-primary{% endif %}" value="{{ exp.expense_category }}" disabled style="font-size: 0.9rem; border-radius: 8px;" title="{% if is_cat_modified %}員工手動修改過費用類別（原始 OCR 辨識值：{{ exp.ocr_category }}）{% endif %}">
+                                </div>
+
+                                <!-- 4. 費用名稱 -->
+                                <div style="flex: 1.5 1 0px; min-width: 150px;">
+                                    <input type="text" class="form-control border-0 bg-white shadow-sm text-muted small px-2 {% if is_item_modified %}border-modified{% endif %}" value="{{ exp.expense_name }}" disabled style="border-radius: 8px;" title="{% if is_item_modified %}員工手動修改過費用名稱（原始 OCR 辨識值：{{ exp.ocr_expense_name }}）{% endif %}">
+                                </div>
+
+                                <!-- 5. 金額 -->
+                                <div style="width: 130px;" class="d-flex flex-column text-end justify-content-center">
+                                    <div class="input-group shadow-sm {% if is_amt_violation %}border-violation{% elif is_amt_modified %}border-modified{% endif %}" style="border-radius: 8px; overflow: hidden;" title="{% if is_amt_violation %}{{ exp.limit_warning_text }}{% elif is_amt_modified %}員工手動修改過金額（原始 OCR 辨識值：NT$ {{ "{:,.0f}".format(exp.ocr_amount) }}）{% endif %}">
+                                        <span class="input-group-text border-0 bg-white text-muted small px-1">$</span>
+                                        <input type="text" class="form-control border-0 bg-white fw-bold {% if is_amt_violation %}text-danger{% else %}text-dark{% endif %} px-1" value="{{ exp.requested_amount|int }}" disabled>
+                                    </div>
+                                </div>
+
+                                <!-- 6. 憑證類型 -->
+                                <div style="width: 135px;">
+                                    <input type="text" class="form-control border-0 bg-white shadow-sm fw-medium px-2 {% if is_type_modified %}border-modified text-primary{% endif %}" value="{{ exp.receipt_type }}" disabled style="font-size: 0.9rem; border-radius: 8px;" title="{% if is_type_modified %}員工手動修改過憑證類型（原始 OCR 原始值：{{ exp.ocr_receipt_type }}）{% endif %}">
+                                </div>
+
+                                <!-- 7. 統一編號 -->
+                                <div style="width: 120px;">
+                                    <input type="text" class="form-control border-0 bg-white shadow-sm px-2 {% if is_tax_violation %}border-violation text-danger{% elif is_tax_modified %}border-modified text-primary{% else %}text-muted small{% endif %}" value="{{ exp.tax_id_number if exp.tax_id_number else '' }}" placeholder="無" disabled style="border-radius: 8px;" title="{% if is_tax_violation %}統一編號與公司統編 (58711014) 不符！{% elif is_tax_modified %}員工手動修改過統一編號（原始 OCR 原始值：{{ exp.ocr_tax_id_number if exp.ocr_tax_id_number else '無' }}）{% endif %}">
+                                </div>
+
+                                <!-- 8. 地點 -->
+                                <div style="flex: 1.2 1 0px; min-width: 120px;">
+                                    <input type="text" class="form-control border-0 bg-white shadow-sm text-muted small px-2 {% if is_loc_violation %}border-violation{% elif is_loc_modified %}border-modified{% endif %}" value="{{ exp.expense_location if exp.expense_location else '無' }}" disabled style="font-size: 0.9rem; border-radius: 8px;" title="{% if is_loc_violation %}消費地點與出差核准地不符！{% elif is_loc_modified %}員工手動修改過地點（原始 OCR 辨識值：{{ exp.ocr_expense_location if exp.ocr_expense_location else '無' }}）{% endif %}">
+                                </div>
+                            </div>
+
+                            <!-- Validation Message & Note Field -->
+                            {% if exp.is_amt_violation %}
+                            <div class="validation-row mt-3 border-top pt-2">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <i class="bi bi-exclamation-triangle-fill text-danger small"></i>
+                                    <span class="text-danger small fw-bold limit-warning">{{ exp.limit_warning_text }}</span>
+                                </div>
+                                <input type="text" class="form-control bg-white shadow-sm text-muted small expense-note {% if show_borders %}{% if exp.expense_note %}border-modified{% else %}border-violation{% endif %}{% endif %}" value="{{ exp.expense_note or '' }}" disabled style="border-radius: 8px;" placeholder="員工未填寫超額說明">
+                            </div>
+                            {% endif %}
+
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Footer Totals Block -->
+                    <div class="d-flex justify-content-between align-items-center mt-4 p-3 bg-light rounded-4 border border-light" style="padding: 15px 25px !important;">
+                        <div>
+                            <span class="fw-bold fs-5 text-dark">總計金額</span>
+                            <span class="text-muted small ms-2">Grand Total</span>
+                        </div>
+                        <span class="fw-bold fs-4 text-danger">${{ "{:,.0f}".format(total_actual) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer bg-white p-4 border-top-0 pt-0">
+            <div class="p-3 rounded-4 bg-light border border-dashed text-center">
+                <i class="bi bi-images fs-2 text-muted d-block mb-2"></i>
+                <span class="text-muted small">所有收據憑證已於系統驗證符合規範</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Bottom Panel: Approval Decisions / Reviewer Comment (Full Width!) -->
+    {% if current_user.role in ['Manager', 'Accountant'] and req.employee_id != current_user.id %}
+    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3"><i class="bi bi-shield-check me-2 text-primary"></i>審核決策</h5>
+            <form id="reviewForm" action="{{ url_for('main.process_review', req_id=req.id) }}" method="POST">
+                <div class="mb-3">
+                    <label class="form-label small text-muted fw-semibold">審核意見 / 退回原因</label>
+                    <textarea id="reviewCommentInput" class="form-control border-0 bg-light p-3" rows="3" placeholder="若要退回案件，請務必填寫原因..." style="border-radius: 12px; font-size: 0.95rem;"></textarea>
+                </div>
+                <input type="hidden" name="review_comment" id="hiddenComment">
+                <input type="hidden" name="action" id="actionField">
+                
+                <div class="d-flex gap-3 justify-content-end mt-4">
+                    <button type="button" onclick="submitReview('reject')" class="btn btn-lg btn-outline-danger px-5" style="border-radius: 12px; font-size: 1rem; font-weight: 600;">
+                        駁回此單
+                    </button>
+                    <button type="button" onclick="submitReview('approve')" class="btn btn-lg btn-primary px-5 shadow-sm" style="border-radius: 12px; font-size: 1rem; font-weight: 600; background-color: var(--brand-primary); border: none;">
+                        <i class="bi bi-check-circle-fill me-2"></i> 核准通過
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% elif req.review_comment %}
+    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3 text-danger"><i class="bi bi-chat-left-text me-2"></i>最新審核意見</h5>
+            <div class="p-3 bg-danger-subtle text-danger rounded-3 border-start border-danger border-4 fw-medium" style="font-size: 0.95rem;">
+                {{ req.review_comment }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <script>
+        function submitReview(action) {
+            const comment = document.getElementById('reviewCommentInput').value.trim();
+            const hiddenComment = document.getElementById('hiddenComment');
+            const actionField = document.getElementById('actionField');
+            const form = document.getElementById('reviewForm');
+
+            if (action === 'reject' && !comment) {
+                alert('退回案件時，必須填寫「審核意見 / 退回原因」。');
+                document.getElementById('reviewCommentInput').focus();
+                return;
+            }
+
+            hiddenComment.value = comment;
+            actionField.value = action;
+            form.submit();
+        }
+    </script>
+
+    <!-- Return Link -->
+    <div class="text-center mt-4 mb-4">
+        {% if current_user.role in ['Manager', 'Accountant'] and req.employee_id != current_user.id %}
+        <a href="{{ url_for('main.approvals') }}" class="text-decoration-none text-muted">
+            <i class="bi bi-arrow-left me-1"></i> 返回簽核中心
+        </a>
+        {% else %}
+        <a href="{{ url_for('main.progress') }}" class="text-decoration-none text-muted">
+            <i class="bi bi-arrow-left me-1"></i> 返回進度追蹤
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 憑證影像預覽視窗 Modal -->
+<div class="modal fade" id="receiptPreviewModal" tabindex="-1" aria-labelledby="receiptPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header border-0 bg-light py-3 px-4">
+                <h5 class="modal-title fw-bold text-primary d-flex align-items-center gap-2" id="receiptPreviewModalLabel">
+                    <i class="bi bi-image fs-4"></i> 原始憑證檔案預覽
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-dark d-flex align-items-center justify-content-center" style="min-height: 400px;">
+                <img id="previewModalImg" src="" class="img-fluid rounded border shadow-sm" style="max-height: 70vh; display: block; margin: 0 auto; object-fit: contain;">
+            </div>
+            <div class="modal-footer border-0 py-3 px-4 bg-light">
+                <button type="button" class="btn btn-secondary px-4 py-2 fw-bold w-100" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    關閉預覽
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Automatically collapse the sidebar when auditing to maximize screen width
+        document.body.classList.add('sidebar-collapsed');
+
+        // Preview receipts modal image src handler
+        document.querySelectorAll('.btn-preview-receipt').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                const fileUrl = this.dataset.fileUrl;
+                if (fileUrl) {
+                    const previewModalImg = document.getElementById('previewModalImg');
+                    previewModalImg.src = fileUrl;
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
